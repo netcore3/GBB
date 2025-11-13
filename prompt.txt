@@ -1,0 +1,305 @@
+## **Python + Qt (QFluentWidgets) Peer-to-Peer Encrypted BBS Application using mDNS + DHT**
+
+---
+
+### 🧠 ROLE & CONTEXT
+
+You are an **expert full-stack software architect** and **Python/Qt engineer** specializing in:
+
+* P2P networking, cryptography, distributed systems
+* UI/UX design in Qt (using **QFluentWidgets** for Fluent Design look)
+* Clean architecture, asynchronous Python (asyncio)
+* Secure, privacy-first software development
+
+Your role:
+➡️ **Design, architect, and generate** a **complete, production-ready Python desktop application** that recreates the functionality of a **Bulletin Board System (BBS)** using **peer-to-peer networking** with **encryption**, **mDNS for local discovery**, and **DHT for global peer lookup**.
+The generated project must be **fully runnable**, **well-documented**, and **ready for distribution** (via PyInstaller, etc.).
+
+---
+
+### 🎯 OBJECTIVE
+
+Build a **decentralized BBS desktop app** that:
+
+* Operates without central servers
+* Allows peers to discover each other automatically (LAN & Internet), without any configuration for the user
+* Uses **end-to-end encryption** for privacy
+* Provides a **modern Fluent Design UI** via **QFluentWidgets**
+* Supports threads, posts, private messages, file sharing, moderation, and identity management
+* Is modular, testable, and extendable
+
+---
+
+### 🧑‍💻 USER STORIES
+
+1. **As a new user**, I can create a cryptographic identity and automatically discover peers on my LAN.
+2. **As a participant**, I can join public boards and post signed messages that sync across peers.
+3. **As a private user**, I can send encrypted direct messages to another peer.
+4. **As a moderator**, I can delete, ban, or trust peers with signed moderation actions.
+5. **As a developer**, I can extend the app easily thanks to its modular architecture and clear API layers.
+
+---
+
+### 🧱 HIGH-LEVEL ARCHITECTURE
+
+#### Layers
+
+| Layer                | Responsibility                                                |
+| -------------------- | ------------------------------------------------------------- |
+| **UI Layer**         | QFluentWidgets-based desktop UI (main window, views, dialogs) |
+| **App Logic Layer**  | Thread, post, chat, moderation management                     |
+| **Networking Layer** | Peer discovery (mDNS + DHT), encrypted transport, replication |
+| **Crypto Layer**     | Key generation, signing, encryption/decryption                |
+| **Storage Layer**    | SQLite + ORM persistence, encrypted blobs                     |
+| **Sync Layer**       | Append-only log replication, vector-clock merge               |
+| **Tests & Docs**     | Unit/integration tests, architecture & protocol docs          |
+
+#### Directory Tree
+
+```
+bbs_p2p_app/
+├── main.py
+├── pyproject.toml
+├── requirements.txt
+├── config/
+│   └── settings.yaml
+├── core/
+│   ├── network_manager.py
+│   ├── crypto_manager.py
+│   ├── dht_manager.py
+│   ├── mdns_service.py
+│   ├── sync_manager.py
+│   └── db_manager.py
+├── ui/
+│   ├── main_window.py
+│   ├── thread_view.py
+│   ├── chat_widget.py
+│   ├── board_list.py
+│   ├── settings_dialog.py
+│   └── fluent_theme.py
+├── models/
+│   ├── user.py
+│   ├── post.py
+│   ├── thread.py
+│   └── board.py
+├── tests/
+│   ├── test_handshake.py
+│   ├── test_sync.py
+│   └── test_ui_launch.py
+└── docs/
+    ├── architecture.md
+    ├── protocol.md
+    └── threat_model.md
+```
+
+---
+
+### 🧩 CORE FEATURES
+
+#### 🔹 Networking (mDNS + DHT + P2P)
+
+* LAN discovery using `zeroconf` (mDNS)
+* Global peer lookup via Kademlia-based DHT
+* Bootstrap node support
+* Encrypted transport over TCP/UDP using asyncio
+* NAT traversal (STUN + UDP hole-punch fallback)
+* Peer records signed and verified (Ed25519)
+
+#### 🔹 Data & Sync
+
+* Local append-only logs for each board
+* Vector clocks or CRDTs for conflict resolution
+* Periodic background sync tasks
+* Message caching and deduplication
+
+#### 🔹 Cryptography
+
+* **Keypairs**: Ed25519 (signing), X25519 (ECDH)
+* **Symmetric Encryption**: ChaCha20-Poly1305 or AES-GCM
+* **Key Derivation**: HKDF
+* **Sealed box** for private messages
+* Secure keystore encrypted with Argon2 + AES-GCM
+
+#### 🔹 Fluent Design UI (QFluentWidgets)
+
+* Built with **QFluentWidgets** (Fluent 2 aesthetic)
+* Responsive layouts with **NavigationInterface**, **NavigationView**, **CardWidget**, and **InfoBar**
+* Light/Dark theme toggle, acrylic backgrounds, icons
+* Fluent animations and system integration
+* Example UI screens:
+
+  * **Home Dashboard**: Board list, thread preview, peer status
+  * **Thread View**: Posts, rich text display, reactions
+  * **Post Composer**: Fluent text editor with attachments
+  * **Chat Window**: Direct encrypted messaging
+  * **Settings Panel**: Key management, network toggles, theme, diagnostics
+
+---
+
+### 🎨 UI STRUCTURE
+
+```
+MainWindow(QFluentWidgets.MainWindow)
+├── NavigationInterface (sidebar)
+│   ├── Boards
+│   ├── Private Chats
+│   ├── Peers
+│   ├── Settings
+│   └── About
+├── NavigationView (content area)
+│   ├── ThreadListPage
+│   ├── MessageViewPage
+│   ├── PeerMonitorPage
+│   ├── SettingsPage
+│   └── ChatPage
+└── InfoBarManager (notifications)
+```
+
+Each page communicates with backend async services (network_manager, sync_manager) via signals/slots and asyncio tasks integrated with Qt’s event loop.
+
+---
+
+### ⚙️ TECHNICAL STACK
+
+| Component         | Library                                 |
+| ----------------- | --------------------------------------- |
+| **Language**      | Python ≥ 3.11                           |
+| **GUI Framework** | PySide6 + QFluentWidgets                |
+| **Networking**    | asyncio, websockets, zeroconf, kademlia |
+| **Database**      | SQLite + SQLAlchemy                     |
+| **Encryption**    | cryptography / PyNaCl                   |
+| **Testing**       | pytest + pytest-asyncio                 |
+| **Packaging**     | PyInstaller                             |
+| **Docs**          | Markdown + PlantUML diagrams            |
+
+---
+
+### ⚡ P2P PROTOCOL SUMMARY
+
+* Transport: TCP/UDP with AEAD encryption
+* Handshake:
+
+  1. Exchange `HELLO` with ephemeral X25519 pubkeys and signatures
+  2. Derive shared session key via ECDH + HKDF
+  3. Exchange `CAPS` (supported features, board states)
+* Message types: `HELLO`, `CAPS`, `POST`, `REQ_MISSING`, `POST_BATCH`, `PRIVATE_MESSAGE`, `FILE_CHUNK`
+* Encoding: CBOR (binary, compact) or JSON (debug)
+* Replication: append-only logs per board with vector clocks
+
+---
+
+### 🔐 SECURITY & PRIVACY
+
+* Forward secrecy via ephemeral keys
+* Signed peer records prevent identity spoofing
+* End-to-end encryption for private chats and attachments
+* Optional proof-of-work spam prevention
+* Revocation and reputation system
+* Data at rest encrypted (SQLCipher / AES-GCM)
+* Threat model documented (`docs/threat_model.md`)
+
+---
+
+### 📜 CONFIGURATION (example)
+
+```yaml
+network:
+  listen_port: 9000
+  enable_mdns: true
+  enable_dht: true
+  bootstrap_nodes:
+    - dht1.bbsnet.io:8468
+    - dht2.bbsnet.io:8468
+ui:
+  theme: "dark"
+  enable_acrylic: true
+security:
+  key_store: "~/.bbs_p2p/keys"
+  encryption: "chacha20poly1305"
+storage:
+  db_path: "~/.bbs_p2p/data.db"
+sync:
+  interval: 30
+```
+
+---
+
+### 🧪 TEST PLAN
+
+* Unit tests for:
+
+  * Key generation, signing, encryption
+  * Message serialization and validation
+  * mDNS peer discovery simulation
+  * DHT store/retrieve
+* Integration test: two peers discover via mDNS, sync messages
+* GUI smoke test: main window loads successfully
+* Continuous Integration: GitHub Actions workflow to run tests on Linux/macOS/Windows
+
+---
+
+### 🧾 DOCUMENTATION DELIVERABLES
+
+* `README.md`: installation, configuration, usage, screenshots
+* `docs/architecture.md`: diagrams of layers & module flow
+* `docs/protocol.md`: handshake, message schema, encryption flow
+* `docs/threat_model.md`: adversaries, mitigations, known limitations
+* `docs/ui_styleguide.md`: QFluentWidgets usage conventions
+
+---
+
+### ✅ ACCEPTANCE CRITERIA
+
+1. GUI built with QFluentWidgets launches and interacts with async backend.
+2. mDNS discovers peers on LAN; DHT resolves remote peers.
+3. Handshake and encrypted message exchange functional.
+4. Posts replicate between two peers in demo mode.
+5. Private message encrypted end-to-end.
+6. Docs and README included.
+7. All tests pass (pytest).
+8. App can be packaged with PyInstaller.
+
+---
+
+### 🧭 OUTPUT INSTRUCTIONS TO THE GENERATOR
+
+When generating:
+
+1. Start with an **architecture overview paragraph** (2–4 lines).
+2. Generate the **full project file tree**.
+3. Provide:
+
+   *  `requirements.txt`
+   * `README.md`
+   * Core source files:
+
+     * `main.py`
+     * `core/network_manager.py` (mDNS + DHT)
+     * `core/crypto_manager.py`
+     * `ui/main_window.py` (QFluentWidgets GUI)
+     * `models/post.py`
+     * `tests/test_integration.py`
+   * Example docs (`architecture.md`, `threat_model.md`)
+4. Include **docstrings and comments** throughout.
+5. Add TODOs for incomplete advanced features (DHT, NAT traversal).
+6. Ensure runnable demo using:
+
+   ```bash
+   python main.py --demo --port 9001
+   python main.py --demo --port 9002 --connect localhost:9001
+   ```
+7. Summarize how deliverables meet acceptance criteria.
+
+---
+
+### 🧩 RECURSIVE QUALITY ENHANCEMENT CRITERIA
+
+For each generated component, verify:
+
+* ✅ Correctness (meets functional spec)
+* ✅ Security (signed, encrypted data flows)
+* ✅ UI Consistency (Fluent Design)
+* ✅ Async safety (non-blocking I/O)
+* ✅ Maintainability (typed, modular, commented)
+* ✅ Documentation (auto-generated and human-readable)
+  If any criterion is weak, **re-analyze and refine that section recursively** before finalizing output.

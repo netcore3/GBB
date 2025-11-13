@@ -1,0 +1,38 @@
+# BBS P2P Application Configuration
+
+network:
+  listen_port: 9000
+  enable_mdns: true
+  enable_dht: false  # TODO: DHT implementation pending
+  bootstrap_nodes:
+    - "bootstrap1.bbs-p2p.example.com:8468"
+    - "bootstrap2.bbs-p2p.example.com:8468"
+  max_peers: 100
+  connection_timeout: 30
+
+ui:
+  theme: "dark"
+  enable_acrylic: true
+  font_size: 12
+  language: "en"
+
+security:
+  key_store_path: "~/.bbs_p2p/keys/keystore.enc"
+  encryption_algorithm: "chacha20poly1305"
+  require_signature_verification: true
+
+storage:
+  db_path: "~/.bbs_p2p/data/bbs.db"
+  max_attachment_size: 52428800  # 50 MB
+  cache_size: 1073741824  # 1 GB
+
+sync:
+  interval: 30
+  batch_size: 50
+  max_retries: 3
+
+logging:
+  level: "INFO"
+  log_path: "~/.bbs_p2p/logs/app.log"
+  max_log_size: 10485760  # 10 MB
+  backup_count: 5
