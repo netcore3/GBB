@@ -1,6 +1,8 @@
 # Implementation Plan
 
-- [-] 1. Project Setup and Core Infrastructure
+- [x] 1. Project Setup and Core Infrastructure
+
+
 
   - Create project directory structure with core/, ui/, models/, logic/, tests/, docs/, config/ folders
   - Set up requirements.txt with PySide6, qfluentwidgets, cryptography, zeroconf, sqlalchemy, pytest, cbor2
@@ -9,40 +11,65 @@
   - _Requirements: 15.5, 17.4_
 
 - [ ] 2. Cryptography Module Implementation
-- [ ] 2.1 Implement Identity and key generation
+
+
+
+
+
+- [x] 2.1 Implement Identity and key generation
+
+
   - Create Identity dataclass with Ed25519 and X25519 keypairs
   - Implement generate_identity() method to create signing and encryption keypairs
   - Implement peer_id derivation from Ed25519 public key using SHA-256
   - _Requirements: 1.1, 1.3_
 
-- [ ] 2.2 Implement signing and verification
+
+- [x] 2.2 Implement signing and verification
+
   - Implement sign_data() method using Ed25519 private key
   - Implement verify_signature() method using Ed25519 public key
   - Add error handling for invalid signatures
   - _Requirements: 6.2, 6.3, 6.4_
 
-- [ ] 2.3 Implement encryption and decryption
+
+- [x] 2.3 Implement encryption and decryption
+
   - Implement encrypt_message() using X25519 sealed box for private messages
   - Implement decrypt_message() for sealed box decryption
   - Implement derive_session_key() using ECDH and HKDF
   - Implement encrypt_with_session_key() and decrypt_with_session_key() using ChaCha20-Poly1305 AEAD
   - _Requirements: 4.2, 4.3, 4.4, 8.2, 8.3_
 
-- [ ] 2.4 Implement keystore encryption
+
+- [x] 2.4 Implement keystore encryption
+
   - Implement save_keystore() with Argon2id key derivation and AES-GCM encryption
   - Implement load_keystore() with password verification and decryption
   - Add support for keystore export and import
   - _Requirements: 1.2, 1.4, 1.5_
 
-- [ ] 2.5 Write unit tests for crypto module
+- [x] 2.5 Write unit tests for crypto module
+
+
+
+
   - Test key generation produces valid keypairs
   - Test signing and verification with valid and tampered data
   - Test encryption/decryption round-trip
   - Test keystore save/load with correct and incorrect passwords
   - _Requirements: 15.1_
 
-- [ ] 3. Database Layer Implementation
-- [ ] 3.1 Define SQLAlchemy models
+- [-] 3. Database Layer Implementation
+
+
+
+
+
+
+- [x] 3.1 Define SQLAlchemy models
+
+
   - Create Board model with id, name, description, creator_peer_id, created_at, signature
   - Create Thread model with id, board_id, title, creator_peer_id, created_at, last_activity, signature
   - Create Post model with id, thread_id, author_peer_id, content, created_at, sequence_number, signature, parent_post_id
@@ -52,7 +79,9 @@
   - Create ModerationAction model with id, moderator_peer_id, action_type, target_id, reason, created_at, signature
   - _Requirements: 13.1_
 
-- [ ] 3.2 Implement DBManager
+
+- [x] 3.2 Implement DBManager
+
   - Implement initialize_database() to create schema
   - Implement save_post(), get_posts_for_thread(), save_board(), get_all_boards()
   - Implement save_private_message(), get_private_messages()
@@ -60,35 +89,61 @@
   - Add transaction management with rollback on error
   - _Requirements: 13.2, 13.4_
 
-- [ ] 3.3 Write database tests
+
+- [x] 3.3 Write database tests
+
+
+
+
+
+
   - Test CRUD operations for all models
   - Test foreign key constraints
   - Test transaction rollback
   - _Requirements: 15.1_
 
-- [ ] 4. Configuration Management
-- [ ] 4.1 Create configuration system
+- [x] 4. Configuration Management
+
+
+
+
+- [x] 4.1 Create configuration system
+
+
   - Create default settings.yaml with network, ui, security, storage, sync, logging sections
   - Implement configuration loader with YAML parsing
   - Implement configuration validator for required fields and types
   - Create user data directory structure (~/.bbs_p2p/) on first launch
   - _Requirements: 13.5, 14.1_
 
-- [ ] 4.2 Implement settings persistence
+
+- [x] 4.2 Implement settings persistence
+
   - Implement save_config() to write changes to YAML file
   - Implement get_config() and set_config() for individual settings
   - Add support for environment variable overrides
   - _Requirements: 14.2, 14.3, 14.4, 14.5, 14.6_
 
-- [ ] 5. Network Manager Core
-- [ ] 5.1 Implement TCP server and client
+- [-] 5. Network Manager Core
+
+
+
+
+- [x] 5.1 Implement TCP server and client
+
   - Create asyncio TCP server listening on configured port
   - Implement accept_connection() to handle incoming peer connections
   - Implement connect_to_peer() to initiate outgoing connections
   - Add connection timeout and error handling
   - _Requirements: 4.1, 18.2_
 
-- [ ] 5.2 Implement handshake protocol
+
+- [x] 5.2 Implement handshake protocol
+
+
+
+
+
   - Implement perform_handshake() with HELLO message exchange
   - Generate ephemeral X25519 keypairs for each connection
   - Exchange ephemeral public keys and Ed25519 signatures
@@ -97,7 +152,11 @@
   - Exchange CAPS messages with supported features and board subscriptions
   - _Requirements: 4.1, 4.2, 2.3_
 
-- [ ] 5.3 Implement encrypted message transport
+- [x] 5.3 Implement encrypted message transport
+
+
+
+
   - Implement send_message() with CBOR encoding and AEAD encryption
   - Implement receive_message() with AEAD decryption and CBOR decoding
   - Implement nonce management (increment per message)
@@ -105,21 +164,47 @@
   - Handle decryption failures and invalid messages
   - _Requirements: 4.3, 4.4, 4.5_
 
-- [ ] 5.4 Implement peer connection management
+
+
+- [x] 5.4 Implement peer connection management
+
+
+
+
+
+
+
+
+
+
+
+
+
   - Maintain active peer connections in dictionary
   - Implement disconnect_peer() for clean connection closure
   - Implement broadcast_to_board() to send message to all peers on a board
   - Add connection state tracking (connecting, connected, disconnected)
   - _Requirements: 2.5_
 
-- [ ] 5.5 Write handshake integration test
+- [x] 5.5 Write handshake integration test
+
+
+
+
+
   - Test two peers performing successful handshake
   - Test handshake with invalid signature
   - Test session key derivation matches on both sides
   - _Requirements: 15.3_
 
-- [ ] 6. mDNS Peer Discovery
-- [ ] 6.1 Implement mDNS service
+- [x] 6. mDNS Peer Discovery
+
+
+
+
+- [x] 6.1 Implement mDNS service
+
+
   - Create mDNSService class using zeroconf library
   - Implement start_advertising() to broadcast "_bbs-p2p._tcp" service
   - Include peer_id, version, and signature in service properties
@@ -127,28 +212,41 @@
   - Implement stop() to clean up service
   - _Requirements: 2.1, 2.4_
 
-- [ ] 6.2 Integrate mDNS with NetworkManager
+
+- [x] 6.2 Integrate mDNS with NetworkManager
+
   - Connect mDNS discovery callback to NetworkManager
   - Verify peer signatures from mDNS service records
   - Add discovered peers to available peers list
   - Remove peers when they disappear from network
   - _Requirements: 2.2, 2.3, 2.5_
 
-- [ ] 6.3 Write mDNS discovery test
+
+- [x] 6.3 Write mDNS discovery test
+
+
   - Test two instances discover each other via mDNS
   - Test service record contains valid signature
   - Test peer removal on disconnect
   - _Requirements: 15.3_
 
-- [ ] 7. Synchronization Manager
-- [ ] 7.1 Implement vector clock
+- [x] 7. Synchronization Manager
+
+
+
+
+- [x] 7.1 Implement vector clock
+
+
   - Create VectorClock class with clock dictionary (peer_id -> sequence_number)
   - Implement increment() to update local sequence number
   - Implement merge() to combine two vector clocks
   - Implement compare() to detect concurrent updates
   - _Requirements: 7.3_
 
-- [ ] 7.2 Implement sync protocol
+
+- [x] 7.2 Implement sync protocol
+
   - Implement sync_board() to synchronize all threads in a board
   - Exchange vector clocks with peer for each board
   - Identify missing posts by comparing vector clocks
@@ -156,41 +254,71 @@
   - Implement handle_incoming_post() to validate, store, and propagate posts
   - _Requirements: 7.1, 7.2, 7.3, 7.5_
 
-- [ ] 7.3 Implement periodic synchronization
+
+
+- [x] 7.3 Implement periodic synchronization
+
+
+
+
+
   - Implement start_periodic_sync() as asyncio background task
   - Sync with all connected peers at configured interval (default 30s)
   - Add exponential backoff for failed sync attempts
   - _Requirements: 7.4_
 
-- [ ]* 7.4 Write sync integration test
+- [x] 7.4 Write sync integration test
+
+
+
+
+
+
+
+
+
+
   - Test post created on peer A appears on peer B
   - Test concurrent posts on both peers converge to same state
   - Test sync after simulated network partition
   - _Requirements: 15.3_
 
-- [ ] 8. Application Logic Layer
-- [ ] 8.1 Implement BoardManager
+- [x] 8. Application Logic Layer
+
+
+
+
+
+
+- [x] 8.1 Implement BoardManager
+
   - Implement create_board() to generate board with unique ID and signature
   - Implement join_board() to subscribe to board and request sync
   - Implement get_board_threads() to retrieve threads from database
   - Announce new boards to connected peers
   - _Requirements: 5.1, 5.2, 5.3_
 
-- [ ] 8.2 Implement ThreadManager
+
+- [x] 8.2 Implement ThreadManager
+
   - Implement create_thread() to create thread with title and initial post
   - Implement add_post_to_thread() to create signed post
   - Implement get_thread_posts() to retrieve posts from database
   - Broadcast new threads and posts to peers
   - _Requirements: 5.5, 6.1, 6.5_
 
-- [ ] 8.3 Implement ChatManager
+
+- [x] 8.3 Implement ChatManager
+
   - Implement send_private_message() with sealed box encryption
   - Implement get_conversation() to retrieve messages for a peer
   - Implement mark_as_read() to update read timestamp
   - Send encrypted messages directly to recipient peer
   - _Requirements: 8.1, 8.2, 8.3, 8.5_
 
-- [ ] 8.4 Implement ModerationManager
+
+- [x] 8.4 Implement ModerationManager
+
   - Implement delete_post() to create signed moderation action
   - Implement ban_peer() to create ban moderation action
   - Implement trust_peer() to add peer to trust list
@@ -198,8 +326,14 @@
   - Broadcast moderation actions to peers
   - _Requirements: 10.1, 10.2, 10.3, 10.4, 10.5_
 
-- [ ] 9. File Attachment Support
-- [ ] 9.1 Implement file attachment handling
+- [x] 9. File Attachment Support
+
+
+
+
+- [x] 9.1 Implement file attachment handling
+
+
   - Implement attach_file_to_post() to compute SHA-256 hash and encrypt file
   - Implement split file into 64KB chunks for transmission
   - Implement send_file_chunks() with AEAD encryption per chunk
@@ -207,14 +341,24 @@
   - Store encrypted file data in Attachment model
   - _Requirements: 9.1, 9.2, 9.3, 9.4, 9.5_
 
-- [ ]* 9.2 Write file transfer test
+- [x] 9.2 Write file transfer test
+
+
+
+
+
+
   - Test 1MB file attachment and transfer
   - Test hash verification on recipient
   - Test chunked transfer with simulated packet loss
   - _Requirements: 15.3_
 
-- [ ] 10. Qt Event Loop Integration
-- [ ] 10.1 Implement asyncio-Qt bridge
+- [-] 10. Qt Event Loop Integration
+
+
+- [x] 10.1 Implement asyncio-Qt bridge
+
+
   - Create QtAsyncioEventLoop class to integrate asyncio with Qt
   - Use QTimer to process asyncio events every 10ms
   - Implement run_coroutine() to schedule async tasks from UI
