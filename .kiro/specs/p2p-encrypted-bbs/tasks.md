@@ -365,14 +365,23 @@
   - Ensure UI remains responsive during async operations
   - _Requirements: 12.1, 12.2, 12.4, 12.5_
 
-- [ ] 10.2 Create signal/slot infrastructure
+
+- [x] 10.2 Create signal/slot infrastructure
+
   - Define Qt signals for network events (peer_connected, peer_disconnected, message_received)
   - Define Qt signals for data events (post_created, board_joined, message_sent)
   - Connect signals to UI update slots
   - _Requirements: 12.4_
 
-- [ ] 11. Main Window UI
-- [ ] 11.1 Create main window structure
+- [x] 11. Main Window UI
+
+
+
+
+
+- [x] 11.1 Create main window structure
+
+
   - Create MainWindow class inheriting from FluentWindow
   - Set up NavigationInterface with sidebar
   - Add navigation items: Boards, Private Chats, Peers, Settings, About
@@ -380,35 +389,51 @@
   - Initialize InfoBarManager for notifications
   - _Requirements: 11.1, 11.2, 11.10_
 
-- [ ] 11.2 Implement theme support
+
+- [x] 11.2 Implement theme support
+
   - Implement apply_theme() to switch between light and dark themes
   - Load theme from configuration on startup
   - Add theme toggle in settings
   - Apply acrylic effects if enabled in config
   - _Requirements: 11.9_
 
-- [ ] 11.3 Connect UI to application logic
+
+- [x] 11.3 Connect UI to application logic
+
   - Inject BoardManager, ThreadManager, ChatManager into MainWindow
   - Connect navigation item clicks to page switching
   - Set up asyncio event loop integration
   - _Requirements: 12.1, 12.2_
 
-- [ ] 12. Board and Thread Views
-- [ ] 12.1 Implement BoardListPage
+- [-] 12. Board and Thread Views
+
+
+- [x] 12.1 Implement BoardListPage
+
+
   - Display boards as CardWidget components in scrollable layout
   - Show board name, description, and activity status
   - Add "Create Board" button with dialog
   - Handle board selection to navigate to thread list
   - _Requirements: 11.3_
 
-- [ ] 12.2 Implement ThreadListPage
+
+- [x] 12.2 Implement ThreadListPage
+
   - Display threads in selected board as list items
   - Show thread title, author, and last activity timestamp
   - Add "Create Thread" button with dialog
   - Handle thread selection to navigate to post view
   - _Requirements: 11.4_
 
-- [ ] 12.3 Implement PostViewPage
+
+- [x] 12.3 Implement PostViewPage
+
+
+
+
+
   - Display posts in selected thread with rich text formatting
   - Show author peer ID, timestamp, and signature verification status
   - Display attachments with download buttons
@@ -417,14 +442,25 @@
   - Add file attachment button
   - _Requirements: 11.5, 11.6_
 
-- [ ] 13. Private Chat UI
-- [ ] 13.1 Implement ChatListPage
+- [x] 13. Private Chat UI
+
+
+
+
+
+
+- [x] 13.1 Implement ChatListPage
+
+
   - Display list of active conversations
   - Show peer name, last message preview, and unread count
   - Add "New Chat" button to start conversation with peer
   - _Requirements: 11.7_
 
-- [ ] 13.2 Implement ChatWidget
+
+
+- [x] 13.2 Implement ChatWidget
+
   - Display messages as chat bubbles (sent/received)
   - Show timestamps and encryption indicators
   - Implement message input field at bottom
@@ -432,15 +468,23 @@
   - Auto-scroll to latest message
   - _Requirements: 11.7_
 
-- [ ] 14. Peers and Settings UI
-- [ ] 14.1 Implement PeerMonitorPage
+- [x] 14. Peers and Settings UI
+
+
+
+
+- [x] 14.1 Implement PeerMonitorPage
+
+
   - Display list of discovered peers (mDNS and DHT)
   - Show peer ID, connection status, last seen
   - Display trust and ban status
   - Add buttons to trust, ban, or start chat with peer
   - _Requirements: 10.5_
 
-- [ ] 14.2 Implement SettingsPage
+
+- [x] 14.2 Implement SettingsPage
+
   - Create tabs for Network, Security, Storage, UI, About
   - Add input fields for listen port, bootstrap nodes, sync interval
   - Add checkboxes for enable_mdns, enable_dht
@@ -450,23 +494,38 @@
   - Add "Save" button to persist configuration
   - _Requirements: 11.8, 14.2, 14.3, 14.4, 14.5, 14.6, 14.7_
 
-- [ ] 15. Error Handling and Notifications
-- [ ] 15.1 Implement global error handler
+- [x] 15. Error Handling and Notifications
+
+
+
+
+
+
+- [x] 15.1 Implement global error handler
+
+
   - Create ErrorHandler class with handle_error() method
   - Categorize errors: crypto, network, storage, UI
   - Display user-friendly error messages via InfoBar
   - Log detailed error information for debugging
   - _Requirements: 4.5, 8.4_
 
-- [ ] 15.2 Implement notification system
+
+
+- [x] 15.2 Implement notification system
+
   - Show InfoBar notifications for connection events
   - Show notifications for new messages and posts
   - Show notifications for moderation actions
   - Add notification sound (optional, configurable)
   - _Requirements: 11.10_
 
-- [ ] 16. Application Entry Point
-- [ ] 16.1 Create main.py
+- [x] 16. Application Entry Point
+
+
+- [x] 16.1 Create main.py
+
+
   - Parse command-line arguments (--demo, --port, --connect)
   - Initialize configuration system
   - Load or create user identity
@@ -476,7 +535,9 @@
   - Start Qt application event loop
   - _Requirements: 13.3, 18.1, 18.2, 18.3, 18.4, 18.5_
 
-- [ ] 16.2 Implement demo mode
+
+- [x] 16.2 Implement demo mode
+
   - Use unique data directory based on port when --demo flag is set
   - Auto-connect to specified peer when --connect flag is provided
   - Generate demo identity if keystore doesn't exist
