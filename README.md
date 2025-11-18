@@ -1,3 +1,8 @@
+<p align="center">
+  ![GhostBBs](GhostBBs.jpeg "GhostBBs ")
+</p>
+
+
 # BBS P2P - Decentralized Encrypted Bulletin Board System
 
 A modern, peer-to-peer bulletin board system with end-to-end encryption, built with Python, Qt, and QFluentWidgets.
@@ -49,6 +54,9 @@ pip install -r requirements.txt
 # Run the application
 python main.py
 ```
+
+#Windows
+set PATH=%PATH%;C:\path\to\qt\bin
 
 ### Demo Mode
 
