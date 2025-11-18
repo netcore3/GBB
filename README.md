@@ -1,5 +1,5 @@
 <p align="center">
-  ![GhostBBs](GhostBBs.jpeg "GhostBBs ")
+  <img src="GhostBBs.jpeg" alt="Centered Image" />
 </p>
 
 
