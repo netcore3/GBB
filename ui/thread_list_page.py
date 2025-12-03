@@ -25,6 +25,10 @@ from qfluentwidgets import (
     StrongBodyLabel
 )
 
+from ui.theme_utils import (
+    GhostTheme, get_metadata_styles, get_empty_state_styles,
+    get_page_margins, SPACING_SMALL, SPACING_MEDIUM
+)
 from logic.board_manager import BoardManager, BoardManagerError
 from logic.thread_manager import ThreadManager, ThreadManagerError
 from models.database import Board, Thread
@@ -70,25 +74,25 @@ class ThreadListItem(QWidget):
         # Metadata row
         meta_layout = QHBoxLayout()
         meta_layout.setSpacing(16)
-        
-        # Author
+
+        # Author - using centralized theme
         author_label = CaptionLabel(f"By: {self.thread.creator_peer_id[:8]}...")
-        author_label.setStyleSheet("color: gray;")
+        author_label.setStyleSheet(f"color: {GhostTheme.get_text_tertiary()};")
         meta_layout.addWidget(author_label)
-        
+
         # Post count
         posts_label = CaptionLabel(f"💬 {self.post_count} posts")
-        posts_label.setStyleSheet("color: gray;")
+        posts_label.setStyleSheet(f"color: {GhostTheme.get_text_tertiary()};")
         meta_layout.addWidget(posts_label)
-        
+
         # Last activity
         last_activity_str = self.thread.last_activity.strftime("%Y-%m-%d %H:%M")
         activity_label = CaptionLabel(f"Last: {last_activity_str}")
-        activity_label.setStyleSheet("color: gray;")
+        activity_label.setStyleSheet(f"color: {GhostTheme.get_text_tertiary()};")
         meta_layout.addWidget(activity_label)
-        
+
         meta_layout.addStretch()
-        
+
         layout.addLayout(meta_layout)
 
 
@@ -217,8 +221,9 @@ class ThreadListPage(ScrollArea):
         
         # Main layout
         self.main_layout = QVBoxLayout(self.view)
-        self.main_layout.setContentsMargins(20, 20, 20, 20)
-        self.main_layout.setSpacing(16)
+        margins = get_page_margins()
+        self.main_layout.setContentsMargins(*margins)
+        self.main_layout.setSpacing(SPACING_MEDIUM)
         
         # Header with back button, title, and create button
         header_layout = QHBoxLayout()
@@ -243,7 +248,7 @@ class ThreadListPage(ScrollArea):
         
         # Board info
         self.board_info_label = BodyLabel("")
-        self.board_info_label.setStyleSheet("color: gray;")
+        self.board_info_label.setStyleSheet(f"color: {GhostTheme.get_text_tertiary()};")
         self.main_layout.addWidget(self.board_info_label)
         
         # Thread list
@@ -304,7 +309,7 @@ class ThreadListPage(ScrollArea):
                 empty_layout = QVBoxLayout(empty_widget)
                 empty_label = BodyLabel("No threads yet. Create one to start a discussion!")
                 empty_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-                empty_label.setStyleSheet("color: gray; padding: 40px;")
+                empty_label.setStyleSheet(f"color: {GhostTheme.get_text_tertiary()}; padding: 40px;")
                 empty_layout.addWidget(empty_label)
                 item.setSizeHint(empty_widget.sizeHint())
                 self.thread_list.addItem(item)

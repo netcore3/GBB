@@ -1,8 +1,3 @@
-<p align="center">
-  <img src="GhostBBs.jpeg" alt="Centered Image" />
-</p>
-
-
 # BBS P2P - Decentralized Encrypted Bulletin Board System
 
 A modern, peer-to-peer bulletin board system with end-to-end encryption, built with Python, Qt, and QFluentWidgets.
@@ -32,21 +27,55 @@ The application is built with a clean layered architecture:
 
 ## Requirements
 
+### All Platforms
 - Python 3.11 or higher
-- Windows, macOS, or Linux
+- 4GB RAM minimum (8GB recommended)
+- 500MB free disk space
+
+### Windows-Specific
+- Windows 10 or later (64-bit)
+- Microsoft Visual C++ Redistributable 2015-2022
+
+### Linux-Specific
+- Qt6 libraries
+- OpenSSL 1.1.1 or later
+- X11 or Wayland display server
+
+### macOS-Specific
+- macOS 10.15 (Catalina) or later
 
 ## Installation
 
-### From Source
+### Windows Requirements
 
-```bash
-# Clone the repository
+Before installing on Windows, ensure you have:
+
+1. **Python 3.11 or higher**
+   - Download from [python.org](https://www.python.org/downloads/)
+   - During installation, check "Add Python to PATH"
+
+2. **Microsoft Visual C++ Redistributable**
+   - Required for PySide6
+   - Download from [Microsoft](https://aka.ms/vs/17/release/vc_redist.x64.exe)
+
+3. **Git** (optional, for cloning)
+   - Download from [git-scm.com](https://git-scm.com/download/win)
+
+### Windows Installation Steps
+
+```powershell
+# Clone the repository (or download ZIP)
 git clone https://github.com/yourusername/bbs-p2p.git
 cd bbs-p2p
 
 # Create virtual environment
 python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+
+# Activate virtual environment
+venv\Scripts\activate
+
+# Upgrade pip
+python -m pip install --upgrade pip
 
 # Install dependencies
 pip install -r requirements.txt
@@ -55,13 +84,62 @@ pip install -r requirements.txt
 python main.py
 ```
 
-#Windows
-set PATH=%PATH%;C:\path\to\qt\bin
+### Debian/Ubuntu Requirements
+
+Before installing on Debian-based systems, ensure you have the required system dependencies:
+
+```bash
+# Update package list
+sudo apt update
+
+# Install Python development headers and build tools
+sudo apt install python3.11 python3.11-dev python3.11-venv build-essential
+
+# Install Qt libraries for PySide6
+sudo apt install qt6-base-dev qt6-tools-dev qt6-websockets-dev
+
+# Install networking and cryptography dependencies
+sudo apt install libssl-dev libffi-dev
+
+# Install additional system libraries
+sudo apt install pkg-config cmake
+
+# Install Qt platform plugin dependencies
+sudo apt install libxcb-cursor0
+```
+
+### Linux/macOS Installation Steps
+
+```bash
+# Clone the repository
+git clone https://github.com/yourusername/bbs-p2p.git
+cd bbs-p2p
+
+# Create virtual environment
+python3.11 -m venv venv
+source venv/bin/activate  # On macOS: source venv/bin/activate
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Run the application
+python main.py
+```
 
 ### Demo Mode
 
 Test the P2P functionality locally by running multiple instances:
 
+**Windows (PowerShell):**
+```powershell
+# Terminal 1 - First peer
+python main.py --demo --port 9001
+
+# Terminal 2 - Second peer (auto-connects to first)
+python main.py --demo --port 9002 --connect localhost:9001
+```
+
+**Linux/macOS:**
 ```bash
 # Terminal 1 - First peer
 python main.py --demo --port 9001
@@ -70,9 +148,44 @@ python main.py --demo --port 9001
 python main.py --demo --port 9002 --connect localhost:9001
 ```
 
+## Troubleshooting
+
+### Windows Issues
+
+**"Python not found" error:**
+- Ensure Python is added to PATH during installation
+- Restart terminal/PowerShell after installing Python
+- Try using `py` instead of `python` command
+
+**"No module named 'PySide6'" error:**
+- Ensure virtual environment is activated: `venv\Scripts\activate`
+- Reinstall dependencies: `pip install -r requirements.txt`
+
+**"VCRUNTIME140.dll not found" error:**
+- Install Microsoft Visual C++ Redistributable
+- Download from: https://aka.ms/vs/17/release/vc_redist.x64.exe
+
+**Firewall blocking connections:**
+- Allow Python through Windows Firewall
+- Default port 9000 needs to be accessible for P2P
+
+### Linux Issues
+
+**"xcb platform plugin" error:**
+- Install: `sudo apt install libxcb-cursor0`
+- Install: `sudo apt install qt6-base-dev`
+
+**Permission denied on port:**
+- Use port > 1024 (e.g., 9000)
+- Or run with sudo (not recommended)
+
 ## Configuration
 
-Configuration is stored in `~/.bbs_p2p/config/settings.yaml`. Key settings:
+Configuration is stored in:
+- **Windows:** `C:\Users\<username>\.bbs_p2p\config\settings.yaml`
+- **Linux/macOS:** `~/.bbs_p2p/config/settings.yaml`
+
+Key settings:
 
 - **network.listen_port**: Port for P2P connections (default: 9000)
 - **network.enable_mdns**: Enable local network discovery (default: true)
@@ -125,6 +238,19 @@ mypy core/ ui/ logic/
 
 ## Building Executable
 
+### Windows
+```powershell
+# Install PyInstaller
+pip install pyinstaller
+
+# Build executable
+python build.py
+
+# Executable will be in dist/ folder
+# Run: dist\GhostBBs.exe
+```
+
+### Linux/macOS
 ```bash
 # Install PyInstaller
 pip install pyinstaller
@@ -133,6 +259,7 @@ pip install pyinstaller
 python build.py
 
 # Executable will be in dist/ folder
+# Run: ./dist/GhostBBs
 ```
 
 ## Project Status

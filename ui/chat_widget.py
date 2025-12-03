@@ -22,6 +22,7 @@ from qfluentwidgets import (
 
 from logic.chat_manager import ChatManager
 from models.database import PrivateMessage
+from ui.theme_utils import GhostTheme, get_title_styles
 
 
 logger = logging.getLogger(__name__)
@@ -79,10 +80,10 @@ class MessageBubble(QFrame):
         encryption_label.setToolTip("End-to-end encrypted")
         bottom_layout.addWidget(encryption_label)
         
-        # Timestamp
+        # Timestamp - using centralized theme
         timestamp_str = self._format_timestamp(self.message.created_at)
         timestamp_label = CaptionLabel(timestamp_str)
-        timestamp_label.setStyleSheet("color: #999999;")
+        timestamp_label.setStyleSheet(f"color: {GhostTheme.get_text_tertiary()};")
         bottom_layout.addWidget(timestamp_label)
         
         bottom_layout.addStretch()
@@ -91,24 +92,24 @@ class MessageBubble(QFrame):
         
         # Style the bubble based on sent/received
         if self.is_sent:
-            # Sent message (right side, blue)
-            self.setStyleSheet("""
-                QFrame {
-                    background-color: #0078D4;
+            # Sent message (right side, new purple color)
+            self.setStyleSheet(f"""
+                QFrame {{
+                    background-color: {GhostTheme.get_purple_primary()};
                     border-radius: 12px;
                     color: white;
-                }
+                }}
             """)
             content_label.setStyleSheet("color: white;")
             timestamp_label.setStyleSheet("color: rgba(255, 255, 255, 0.8);")
         else:
             # Received message (left side, gray)
             if isDarkTheme():
-                bg_color = "#2D2D2D"
-                text_color = "white"
+                bg_color = GhostTheme.get_secondary_background()
+                text_color = GhostTheme.get_text_primary()
             else:
-                bg_color = "#F0F0F0"
-                text_color = "black"
+                bg_color = GhostTheme.get_secondary_background()
+                text_color = GhostTheme.get_text_primary()
             
             self.setStyleSheet(f"""
                 QFrame {{
@@ -220,28 +221,28 @@ class ChatWidget(QWidget):
             Header widget
         """
         header = QFrame()
-        header.setFixedHeight(60)
-        header.setStyleSheet("""
-            QFrame {
-                background-color: rgba(0, 0, 0, 0.05);
-                border-bottom: 1px solid rgba(0, 0, 0, 0.1);
-            }
+        header.setFixedHeight(70)  # Increased height to accommodate larger title
+        header.setStyleSheet(f"""
+            QFrame {{
+                background-color: {GhostTheme.get_background()};
+                border-bottom: 1px solid {GhostTheme.get_tertiary_background()};
+            }}
         """)
         
         layout = QHBoxLayout(header)
         layout.setContentsMargins(20, 10, 20, 10)
         
-        # Peer name/ID
+        # Peer name/ID - Apply standardized title style
         peer_display = self.peer_id[:16] + "..." if len(self.peer_id) > 16 else self.peer_id
         peer_label = StrongBodyLabel(peer_display)
-        peer_label.setFont(QFont("Segoe UI", 12, QFont.Weight.DemiBold))
+        peer_label.setStyleSheet(get_title_styles())  # Apply standardized title style
         layout.addWidget(peer_label)
         
         layout.addStretch()
         
         # Encryption indicator
         encryption_label = BodyLabel("🔒 End-to-end encrypted")
-        encryption_label.setStyleSheet("color: #999999; font-size: 11px;")
+        encryption_label.setStyleSheet(f"color: {GhostTheme.get_text_tertiary()}; font-size: 11px;")
         layout.addWidget(encryption_label)
         
         return header
@@ -255,11 +256,11 @@ class ChatWidget(QWidget):
         """
         input_container = QFrame()
         input_container.setFixedHeight(80)
-        input_container.setStyleSheet("""
-            QFrame {
-                background-color: rgba(0, 0, 0, 0.02);
-                border-top: 1px solid rgba(0, 0, 0, 0.1);
-            }
+        input_container.setStyleSheet(f"""
+            QFrame {{
+                background-color: {GhostTheme.get_background()};
+                border-top: 1px solid {GhostTheme.get_tertiary_background()};
+            }}
         """)
         
         layout = QHBoxLayout(input_container)
@@ -270,6 +271,16 @@ class ChatWidget(QWidget):
         self.attach_btn = PushButton(FluentIcon.ATTACH, "")
         self.attach_btn.setFixedSize(40, 40)
         self.attach_btn.setToolTip("Attach file")
+        self.attach_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {GhostTheme.get_secondary_background()};
+                border-radius: 20px;
+                border: 1px solid {GhostTheme.get_tertiary_background()};
+            }}
+            QPushButton:hover {{
+                background-color: {GhostTheme.get_purple_primary()};
+            }}
+        """)
         self.attach_btn.clicked.connect(self._on_attach_file_clicked)
         layout.addWidget(self.attach_btn)
         
@@ -278,11 +289,37 @@ class ChatWidget(QWidget):
         self.message_input.setPlaceholderText("Type a message...")
         self.message_input.setFixedHeight(56)
         self.message_input.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        self.message_input.setStyleSheet(f"""
+            QPlainTextEdit {{
+                background-color: {GhostTheme.get_secondary_background()};
+                border: 1px solid {GhostTheme.get_tertiary_background()};
+                border-radius: 8px;
+                padding: 8px;
+            }}
+            QPlainTextEdit:focus {{
+                border: 2px solid {GhostTheme.get_purple_primary()};
+            }}
+        """)
         layout.addWidget(self.message_input, stretch=1)
         
-        # Send button
+        # Send button - relocated to far-right end of text input container
         self.send_btn = PrimaryPushButton(FluentIcon.SEND, "Send")
         self.send_btn.setFixedSize(80, 40)
+        self.send_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {GhostTheme.get_purple_primary()};
+                color: white;
+                border: none;
+                border-radius: 6px;
+                padding: 6px 12px;
+            }}
+            QPushButton:hover {{
+                background-color: {GhostTheme.get_purple_secondary()};
+            }}
+            QPushButton:pressed {{
+                background-color: {GhostTheme.get_purple_tertiary()};
+            }}
+        """)
         self.send_btn.clicked.connect(self._on_send_clicked)
         layout.addWidget(self.send_btn)
         

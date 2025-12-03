@@ -10,16 +10,20 @@ from typing import Optional, List
 from datetime import datetime
 from PySide6.QtCore import Qt, Signal, QSize
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel,
-    QScrollArea, QFrame, QPushButton
+    QWidget, QVBoxLayout, QHBoxLayout, QLabel
 )
 from PySide6.QtGui import QFont
 from qfluentwidgets import (
-    PushButton, PrimaryPushButton, CardWidget,
-    FluentIcon, BodyLabel, CaptionLabel,
-    StrongBodyLabel, ScrollArea, isDarkTheme
+    PrimaryPushButton, CardWidget,
+    FluentIcon, CaptionLabel,
+    StrongBodyLabel, SubtitleLabel, ScrollArea
 )
 
+from ui.theme_utils import (
+    GhostTheme, get_page_margins, get_card_margins,
+    SPACING_MEDIUM
+)
+from ui.hover_card import apply_hover_glow
 from logic.chat_manager import ChatManager
 from models.database import PrivateMessage
 
@@ -54,11 +58,11 @@ class ConversationCard(CardWidget):
             parent: Parent widget
         """
         super().__init__(parent)
-        
+
         self.peer_id = peer_id
         self.last_message = last_message
         self.unread_count = unread_count
-        
+
         self._setup_ui()
         self._connect_signals()
     
@@ -66,8 +70,9 @@ class ConversationCard(CardWidget):
         """Set up the card UI."""
         # Main layout
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(16, 12, 16, 12)
-        layout.setSpacing(12)
+        margins = get_card_margins()
+        layout.setContentsMargins(margins[0], margins[1] - 4, margins[2], margins[3] - 4)  # Slightly less vertical
+        layout.setSpacing(SPACING_MEDIUM - 4)
         
         # Left side: Peer info and message preview
         left_layout = QVBoxLayout()
@@ -84,46 +89,43 @@ class ConversationCard(CardWidget):
             preview_text = "[Encrypted Message]"  # We don't decrypt here for privacy
             self.preview_label = CaptionLabel(preview_text)
             self.preview_label.setTextFormat(Qt.TextFormat.PlainText)
-            
-            # Style preview text
-            if isDarkTheme():
-                self.preview_label.setStyleSheet("color: #999999;")
-            else:
-                self.preview_label.setStyleSheet("color: #666666;")
-            
+
+            # Style preview text using centralized theme
+            self.preview_label.setStyleSheet(f"color: {GhostTheme.get_text_tertiary()};")
+
             left_layout.addWidget(self.preview_label)
         else:
             self.preview_label = CaptionLabel("No messages yet")
-            self.preview_label.setStyleSheet("color: #999999; font-style: italic;")
+            self.preview_label.setStyleSheet(f"color: {GhostTheme.get_text_tertiary()}; font-style: italic;")
             left_layout.addWidget(self.preview_label)
-        
+
         layout.addLayout(left_layout, stretch=1)
-        
+
         # Right side: Timestamp and unread badge
         right_layout = QVBoxLayout()
         right_layout.setSpacing(4)
         right_layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignRight)
-        
+
         # Timestamp
         if self.last_message:
             timestamp_str = self._format_timestamp(self.last_message.created_at)
             self.timestamp_label = CaptionLabel(timestamp_str)
-            self.timestamp_label.setStyleSheet("color: #999999;")
+            self.timestamp_label.setStyleSheet(f"color: {GhostTheme.get_text_tertiary()};")
             right_layout.addWidget(self.timestamp_label)
-        
+
         # Unread count badge
         if self.unread_count > 0:
             self.unread_badge = QLabel(str(self.unread_count))
             self.unread_badge.setFixedSize(24, 24)
             self.unread_badge.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            self.unread_badge.setStyleSheet("""
-                QLabel {
-                    background-color: #0078D4;
-                    color: white;
+            self.unread_badge.setStyleSheet(f"""
+                QLabel {{
+                    background-color: {GhostTheme.get_purple_primary()};
+                    color: {GhostTheme.get_text_primary()};
                     border-radius: 12px;
                     font-size: 11px;
                     font-weight: bold;
-                }
+                }}
             """)
             right_layout.addWidget(self.unread_badge)
         
@@ -132,6 +134,9 @@ class ConversationCard(CardWidget):
         # Make card clickable
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.setFixedHeight(80)
+
+        # Apply hover glow
+        apply_hover_glow(self, color=GhostTheme.get_purple_primary())
     
     def _format_timestamp(self, dt: datetime) -> str:
         """
@@ -224,98 +229,127 @@ class ChatListPage(QWidget):
         logger.info("ChatListPage initialized")
     
     def _setup_ui(self):
-        """Set up the page UI."""
-        # Main layout
+        """Set up the page UI with layout matching PeerMonitorPage and BoardListPage."""
+        # Main vertical layout
         main_layout = QVBoxLayout(self)
-        main_layout.setContentsMargins(20, 20, 20, 20)
-        main_layout.setSpacing(16)
-        
-        # Header with title and new chat button
+        margins = get_page_margins()
+        main_layout.setContentsMargins(*margins)
+        main_layout.setSpacing(SPACING_MEDIUM)
+
+        # Add outer border to the page (like PeerMonitorPage)
+        self.setStyleSheet(f"""
+            QWidget {{
+                background-color: {GhostTheme.get_background()};
+                border: 1.5px solid {GhostTheme.get_tertiary_background()};
+                border-radius: 10px;
+            }}
+            QScrollArea {{
+                background-color: {GhostTheme.get_background()};
+                border: none;
+            }}
+        """)
+
+        # Header with title and New Chat button (same row)
         header_layout = QHBoxLayout()
-        
-        # Title
-        title_label = QLabel("Private Chats")
-        title_label.setFont(QFont("Segoe UI", 20, QFont.Weight.Bold))
+        header_layout.setSpacing(SPACING_MEDIUM)
+
+        # Title (top-left) — match PeerMonitorPage style
+        title_label = SubtitleLabel("Private Chats")
+        title_label.setStyleSheet(f"color: {GhostTheme.get_text_primary()};")
         header_layout.addWidget(title_label)
-        
+
         header_layout.addStretch()
-        
-        # New Chat button
+
+        # New Chat button (PrimaryPushButton, like Create BBS)
         self.new_chat_btn = PrimaryPushButton(FluentIcon.ADD, "New Chat")
-        self.new_chat_btn.clicked.connect(self._on_new_chat_clicked)
+        self.new_chat_btn.setIconSize(QSize(18, 18))
+        try:
+            from ui.theme_utils import get_button_styles
+            self.new_chat_btn.setStyleSheet(get_button_styles("primary") + "\nQPushButton { padding: 8px 14px; text-align: left; }")
+        except Exception:
+            self.new_chat_btn.setStyleSheet(f"background-color: {GhostTheme.get_purple_primary()}; color: {GhostTheme.get_text_primary()}; padding: 8px 14px;")
+        self.new_chat_btn.clicked.connect(self.new_chat_requested.emit)
         header_layout.addWidget(self.new_chat_btn)
-        
+
         main_layout.addLayout(header_layout)
-        
-        # Scroll area for conversations
+
+        # Scroll area for conversations (with border)
         self.scroll_area = ScrollArea()
         self.scroll_area.setWidgetResizable(True)
         self.scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        
+        self.scroll_area.setStyleSheet(f"""
+            QScrollArea {{
+                background-color: {GhostTheme.get_background()};
+                border: 1.5px solid {GhostTheme.get_tertiary_background()};
+                border-radius: 8px;
+            }}
+        """)
+
         # Container for conversation cards
         self.conversations_container = QWidget()
+        self.conversations_container.setStyleSheet(f"background-color: {GhostTheme.get_background()};")
         self.conversations_layout = QVBoxLayout(self.conversations_container)
         self.conversations_layout.setContentsMargins(0, 0, 0, 0)
         self.conversations_layout.setSpacing(8)
         self.conversations_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
-        
+
         self.scroll_area.setWidget(self.conversations_container)
-        main_layout.addWidget(self.scroll_area)
-        
+        main_layout.addWidget(self.scroll_area, 1)  # Expand to fill available space
+
         # Empty state label (shown when no conversations)
         self.empty_label = QLabel("No conversations yet\n\nClick 'New Chat' to start messaging")
         self.empty_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.empty_label.setStyleSheet("color: #999999; font-size: 14px;")
+        self.empty_label.setStyleSheet(f"color: {GhostTheme.get_text_tertiary()}; font-size: 14px;")
         self.empty_label.hide()
-        
-        main_layout.addWidget(self.empty_label)
-    
+
+        self.conversations_container.layout().addWidget(self.empty_label)
+
     def _load_conversations(self):
         """Load all conversations from chat manager."""
         try:
             # Clear existing cards
             self._clear_conversations()
-            
+
             # Get all conversation peer IDs
             peer_ids = self.chat_manager.get_all_conversations()
-            
+
             if not peer_ids:
                 # Show empty state
                 self.scroll_area.hide()
                 self.empty_label.show()
                 logger.debug("No conversations to display")
                 return
-            
+
             # Hide empty state
             self.empty_label.hide()
             self.scroll_area.show()
-            
+
             # Create conversation cards
             conversations_data = []
-            
+
             for peer_id in peer_ids:
                 # Get conversation messages
                 messages = self.chat_manager.get_conversation(peer_id)
-                
+
                 if not messages:
                     continue
-                
+
                 # Get last message
                 last_message = messages[-1] if messages else None
-                
+
                 # Get unread count
                 unread_count = self.chat_manager.get_unread_count(peer_id)
-                
+
                 conversations_data.append({
                     'peer_id': peer_id,
                     'last_message': last_message,
                     'unread_count': unread_count,
                     'timestamp': last_message.created_at if last_message else datetime.min
                 })
-            
+
             # Sort by most recent activity
             conversations_data.sort(key=lambda x: x['timestamp'], reverse=True)
-            
+
             # Create cards
             for conv_data in conversations_data:
                 card = ConversationCard(
@@ -324,12 +358,12 @@ class ChatListPage(QWidget):
                     unread_count=conv_data['unread_count']
                 )
                 card.clicked.connect(self._on_conversation_clicked)
-                
+
                 self.conversations_layout.addWidget(card)
                 self.conversation_cards.append(card)
-            
+
             logger.info(f"Loaded {len(self.conversation_cards)} conversations")
-            
+
         except Exception as e:
             logger.error(f"Failed to load conversations: {e}")
     

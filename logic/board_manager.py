@@ -60,21 +60,24 @@ class BoardManager:
         # Track subscribed boards
         self.subscribed_boards: set[str] = set()
     
-    def create_board(self, name: str, description: str = "") -> Board:
+    def create_board(self, name: str, description: str = "", welcome_message: str = "", image_path: str = "", is_private: bool = False) -> Board:
         """
         Create a new board with unique ID and signature.
-        
+
         The board is signed by the creator to ensure authenticity and prevent
         tampering. The signature covers the board ID, name, description, creator
         peer ID, and creation timestamp.
-        
+
         Args:
             name: Board name (3-50 characters)
             description: Board description (optional)
-            
+            welcome_message: Welcome message shown on board entry (optional)
+            image_path: Path to board image (optional)
+            is_private: Whether the board is private/invite-only (default: False)
+
         Returns:
             Board: Created board object
-            
+
         Raises:
             BoardManagerError: If board creation fails
             ValueError: If name is invalid
@@ -82,29 +85,32 @@ class BoardManager:
         # Validate input
         if not name or len(name) < 3 or len(name) > 50:
             raise ValueError("Board name must be 3-50 characters")
-        
+
         try:
             # Generate unique board ID
             board_id = str(uuid.uuid4())
             created_at = datetime.utcnow()
-            
-            # Create message to sign
+
+            # Create message to sign (include welcome_message, image_path, and is_private for integrity)
             message_to_sign = (
-                f"{board_id}|{name}|{description}|"
+                f"{board_id}|{name}|{description}|{welcome_message}|{image_path}|{is_private}|"
                 f"{self.identity.peer_id}|{created_at.isoformat()}"
             ).encode('utf-8')
-            
+
             # Sign the board
             signature = self.crypto.sign_data(
                 message_to_sign,
                 self.identity.signing_private_key
             )
-            
+
             # Create board object
             board = Board(
                 id=board_id,
                 name=name,
                 description=description,
+                welcome_message=welcome_message,
+                image_path=image_path,
+                is_private=is_private,
                 creator_peer_id=self.identity.peer_id,
                 created_at=created_at,
                 signature=signature
@@ -258,6 +264,8 @@ class BoardManager:
                     "board_id": board.id,
                     "name": board.name,
                     "description": board.description,
+                    "welcome_message": getattr(board, 'welcome_message', None),
+                    "image_path": getattr(board, 'image_path', None),
                     "creator_peer_id": board.creator_peer_id,
                     "created_at": board.created_at.isoformat(),
                     "signature": board.signature.hex()
@@ -353,3 +361,60 @@ class BoardManager:
         except Exception as e:
             logger.error(f"Failed to verify board signature: {e}")
             return False
+
+    def update_board(self, board_id: str, name: str, description: str, welcome_message: str = "", image_path: str = "", is_private: bool = False) -> Board:
+        """
+        Update an existing board's name and description. Only the original creator
+        may update a board. The board will be re-signed with the creator's key.
+
+        Args:
+            board_id: ID of the board to update
+            name: New name
+            description: New description
+            welcome_message: Welcome message shown on board entry (optional)
+            image_path: Path to board image (optional)
+            is_private: Whether the board is private/invite-only (default: False)
+
+        Returns:
+            Updated Board object
+        """
+        try:
+            board = self.get_board_by_id(board_id)
+            if not board:
+                raise BoardManagerError("Board not found")
+
+            if board.creator_peer_id != self.identity.peer_id:
+                raise BoardManagerError("Only the creator can edit this board")
+
+            # Update fields
+            board.name = name
+            board.description = description
+            board.welcome_message = welcome_message
+            board.image_path = image_path
+            board.is_private = is_private
+
+            # Re-sign using original created_at value and include metadata
+            message_to_sign = (
+                f"{board.id}|{board.name}|{board.description}|{getattr(board,'welcome_message','')}|{getattr(board,'image_path','')}|{board.is_private}|"
+                f"{board.creator_peer_id}|{board.created_at.isoformat()}"
+            ).encode('utf-8')
+
+            board.signature = self.crypto.sign_data(
+                message_to_sign,
+                self.identity.signing_private_key
+            )
+
+            # Persist update
+            self.db.update_board(board)
+
+            # Optionally re-announce the board update to peers
+            self._announce_board(board)
+
+            logger.info(f"Updated board '{board.name}' ({board.id[:8]})")
+            return board
+
+        except BoardManagerError:
+            raise
+        except Exception as e:
+            logger.error(f"Failed to update board: {e}")
+            raise BoardManagerError(f"Update failed: {e}")

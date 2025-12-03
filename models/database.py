@@ -12,22 +12,47 @@ from sqlalchemy.orm import declarative_base, relationship
 Base = declarative_base()
 
 
+class Profile(Base):
+    """Represents a local user profile on this device.
+
+    Profiles are *not* network identities; they are local personas that can
+    have their own display name, avatar, and shared folder. A single peer
+    identity/keystore can be associated with one or more profiles via the
+    ``peer_id`` and optional ``keystore_path`` fields.
+    """
+
+    __tablename__ = "profiles"
+
+    id = Column(String, primary_key=True)  # UUID
+    display_name = Column(String, nullable=False)
+    avatar_path = Column(String, nullable=True)
+    shared_folder = Column(String, nullable=True)
+    peer_id = Column(String, nullable=True)  # linked crypto identity (optional)
+    keystore_path = Column(String, nullable=True)
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    last_used = Column(DateTime, nullable=False, default=datetime.utcnow)
+
+
 class Board(Base):
     """
-    Represents a public discussion board.
-    
+    Represents a discussion board.
+
     A board is a container for threads and is identified by a unique ID.
     Each board is created by a peer and signed to ensure authenticity.
+    Boards can be public (visible to all peers) or private (invite-only).
     """
     __tablename__ = 'boards'
-    
+
     id = Column(String, primary_key=True)  # UUID
     name = Column(String, nullable=False)
     description = Column(String)
     creator_peer_id = Column(String, nullable=False)
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
     signature = Column(LargeBinary, nullable=False)
-    
+    welcome_message = Column(Text, nullable=True)
+    image_path = Column(String, nullable=True)
+    is_private = Column(Boolean, default=False, nullable=False)
+
     # Relationships
     threads = relationship("Thread", back_populates="board", cascade="all, delete-orphan")
     

@@ -6,7 +6,8 @@ Provides configuration interface for network, security, storage, UI, and other s
 
 import logging
 from pathlib import Path
-from PySide6.QtCore import Qt, Signal
+from types import SimpleNamespace
+from PySide6.QtCore import Qt, Signal, QObject
 from PySide6.QtWidgets import (
     QWidget,
     QVBoxLayout,
@@ -16,7 +17,6 @@ from PySide6.QtWidgets import (
 )
 from qfluentwidgets import (
     ScrollArea,
-    ExpandLayout,
     SettingCardGroup,
     SwitchSettingCard,
     ComboBoxSettingCard,
@@ -27,11 +27,110 @@ from qfluentwidgets import (
     InfoBar,
     InfoBarPosition
 )
+from qfluentwidgets import LineEdit, CaptionLabel, PrimaryPushButton
+from PySide6.QtWidgets import QPushButton
 
 from config.config_manager import ConfigManager
+from core.db_manager import DBManager
+from models.database import Profile
+from ui.theme_utils import (
+    get_title_styles, GhostTheme, get_page_margins, SPACING_MEDIUM, SPACING_LARGE
+)
 
 
 logger = logging.getLogger(__name__)
+
+
+class DummyConfigItem(QObject):
+    """Dummy config item for use with qfluentwidgets setting cards that require configItem."""
+    
+    valueChanged = Signal()
+    
+    def __init__(self, value=None, options=None, range_tuple=None):
+        super().__init__()
+        self.value = value
+        self.options = options or []
+        self.range = range_tuple or (0, 100)
+        self.restart = False  # Add missing restart attribute
+
+
+class SettingsHeaderWidget(QWidget):
+    """Header widget for profile display name and shared folder.
+
+    Historically these values lived in the YAML config only. With the
+    introduction of Profiles, the authoritative source is now the active
+    Profile row in the database. We still fall back to config values for
+    backwards compatibility if the profile fields are empty.
+    """
+
+    def __init__(
+        self,
+        config_manager: ConfigManager,
+        profile: Profile,
+        db_manager: DBManager,
+        parent=None,
+    ) -> None:
+        super().__init__(parent)
+        self.config_manager = config_manager
+        self.profile = profile
+        self.db_manager = db_manager
+        self._setup_ui()
+
+    def _setup_ui(self):
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(12)
+
+        # Avatar / display name (from profile, with config fallback)
+        self.avatar_label = QLabel("Display name:")
+        self.avatar_input = LineEdit()
+        name = (self.profile.display_name or "").strip()
+        if not name:
+            try:
+                ui_cfg = self.config_manager.get_ui_config()
+                name = getattr(ui_cfg, "avatar_name", "") or ""
+            except Exception:  # noqa: BLE001
+                name = ""
+        self.avatar_input.setText(name)
+
+        layout.addWidget(self.avatar_label)
+        layout.addWidget(self.avatar_input, stretch=1)
+
+        # Shared folder selector (from profile.shared_folder with config fallback)
+        self.shared_label = QLabel("Shared folder:")
+        self.shared_path = CaptionLabel("")
+        shared_folder = (self.profile.shared_folder or "").strip()
+        if not shared_folder:
+            try:
+                cfg_path = self.config_manager.get_config("storage").get(
+                    "shared_folder", ""
+                )
+                shared_folder = str(cfg_path) if cfg_path else ""
+            except Exception:  # noqa: BLE001
+                shared_folder = ""
+        self.shared_path.setText(shared_folder)
+
+        # Browse button for choosing folder
+        self.browse_btn = QPushButton("Browse")
+        self.browse_btn.clicked.connect(self._on_browse_clicked)
+
+        layout.addWidget(self.shared_label)
+        layout.addWidget(self.shared_path, stretch=2)
+        layout.addWidget(self.browse_btn)
+
+    def set_shared_path(self, path: str):
+        self.shared_path.setText(path)
+
+    def get_avatar_name(self) -> str:
+        return self.avatar_input.text().strip()
+
+    def get_shared_folder(self) -> str:
+        return self.shared_path.text().strip()
+
+    def _on_browse_clicked(self):
+        path = QFileDialog.getExistingDirectory(self, "Select shared folder")
+        if path:
+            self.set_shared_path(path)
 
 
 class SettingsPage(ScrollArea):
@@ -54,7 +153,13 @@ class SettingsPage(ScrollArea):
     theme_changed = Signal(Theme)
     settings_saved = Signal()
     
-    def __init__(self, config_manager: ConfigManager, parent=None):
+    def __init__(
+        self,
+        config_manager: ConfigManager,
+        profile: Profile,
+        db_manager: DBManager,
+        parent=None,
+    ):
         """
         Initialize settings page.
         
@@ -65,11 +170,16 @@ class SettingsPage(ScrollArea):
         super().__init__(parent)
         
         self.config_manager = config_manager
+        self.profile = profile
+        self.db_manager = db_manager
         
         # Create main widget and layout
         self.view = QWidget()
-        self.vBoxLayout = ExpandLayout(self.view)
-        
+        self.vBoxLayout = QVBoxLayout(self.view)
+        margins = get_page_margins()
+        self.vBoxLayout.setContentsMargins(*margins)
+        self.vBoxLayout.setSpacing(SPACING_MEDIUM)
+
         # Setup UI
         self._setup_ui()
         
@@ -87,10 +197,82 @@ class SettingsPage(ScrollArea):
     
     def _setup_ui(self):
         """Set up the settings UI with all configuration cards."""
+        # Apply dark purple theme stylesheet for Settings page
+        self.setStyleSheet(f"""
+            QScrollArea {{
+                border: none;
+                background: transparent;
+            }}
+            QWidget#view {{
+                background: transparent;
+            }}
+            QLabel[objectName="titleLabel"] {{
+                {get_title_styles()}
+            }}
+            /* Primary buttons - using centralized theme */
+            QPushButton[objectName="PrimaryPushButton"],
+            PrimaryPushButton {{
+                background-color: {GhostTheme.get_purple_primary()};
+                color: {GhostTheme.get_text_primary()};
+                border: none;
+                border-radius: 4px;
+                padding: 6px 12px;
+                font-weight: 500;
+            }}
+            QPushButton[objectName="PrimaryPushButton"]:hover,
+            PrimaryPushButton:hover {{
+                background-color: {GhostTheme.get_purple_secondary()};
+            }}
+            QPushButton[objectName="PrimaryPushButton"]:pressed,
+            PrimaryPushButton:pressed {{
+                background-color: {GhostTheme.get_purple_tertiary()};
+            }}
+            /* Selection and focus */
+            QListView::item:selected {{
+                background-color: {GhostTheme.get_purple_primary()};
+                color: {GhostTheme.get_text_primary()};
+            }}
+            QComboBox::item:selected {{
+                background-color: {GhostTheme.get_purple_primary()};
+            }}
+            /* ComboBox dropdown */
+            ComboBox QAbstractItemView {{
+                selection-background-color: {GhostTheme.get_purple_primary()};
+            }}
+            /* Slider styling */
+            Slider::groove:horizontal {{
+                background: {GhostTheme.get_tertiary_background()};
+            }}
+            Slider::handle:horizontal {{
+                background: {GhostTheme.get_purple_primary()};
+            }}
+            Slider::handle:horizontal:hover {{
+                background: {GhostTheme.get_purple_secondary()};
+            }}
+            Slider::sub-page:horizontal {{
+                background: {GhostTheme.get_purple_primary()};
+            }}
+        """)
+        
         # Add title
         title_label = QLabel("Settings")
-        title_label.setStyleSheet("font-size: 28px; font-weight: bold; margin: 20px 0;")
+        title_label.setObjectName("titleLabel")  # Add object name for styling
+        title_label.setStyleSheet(get_title_styles())
         self.vBoxLayout.addWidget(title_label)
+        
+        # Add avatar and shared folder header widget (profile-backed)
+        try:
+            header = SettingsHeaderWidget(
+                self.config_manager,
+                self.profile,
+                self.db_manager,
+                parent=self.view,
+            )
+            self.vBoxLayout.addWidget(header)
+            self._settings_header = header
+        except Exception as e:  # noqa: BLE001
+            logger.warning(f"Failed to create settings header: {e}")
+            self._settings_header = None
         
         # Create setting groups
         self._create_ui_settings()
@@ -98,7 +280,6 @@ class SettingsPage(ScrollArea):
         self._create_security_settings()
         self._create_storage_settings()
         self._create_sync_settings()
-        self._create_about_section()
         
         # Add save button at the bottom
         self._create_save_button()
@@ -109,32 +290,35 @@ class SettingsPage(ScrollArea):
     def _create_ui_settings(self):
         """Create UI settings group."""
         ui_config = self.config_manager.get_ui_config()
-        
+
+        # Create group container
         self.ui_group = SettingCardGroup("User Interface", self.view)
-        
+
         # Theme selector
+        theme_config_item = DummyConfigItem(value=ui_config.theme.lower(), options=["dark", "light", "auto"])
         self.theme_card = ComboBoxSettingCard(
-            configItem=None,
+            configItem=theme_config_item,
             icon=FluentIcon.BRUSH,
             title="Theme",
             content="Choose application theme",
             texts=["Dark", "Light", "Auto"],
             parent=self.ui_group
         )
-        
+
         # Set current theme
         current_theme = ui_config.theme.capitalize()
         if current_theme in ["Dark", "Light"]:
             self.theme_card.comboBox.setCurrentText(current_theme)
         else:
             self.theme_card.comboBox.setCurrentText("Dark")
-        
+
         # Connect theme change signal
         self.theme_card.comboBox.currentTextChanged.connect(self._on_theme_changed)
-        
+
         # Font size slider
+        font_size_config_item = DummyConfigItem(value=ui_config.font_size, range_tuple=(8, 24))
         self.font_size_card = RangeSettingCard(
-            configItem=None,
+            configItem=font_size_config_item,
             icon=FluentIcon.FONT,
             title="Font Size",
             content="Adjust text size",
@@ -143,25 +327,24 @@ class SettingsPage(ScrollArea):
         self.font_size_card.slider.setRange(8, 24)
         self.font_size_card.slider.setValue(ui_config.font_size)
         self.font_size_card.valueLabel.setText(str(ui_config.font_size))
-        self.font_size_card.slider.valueChanged.connect(
-            lambda v: self.font_size_card.valueLabel.setText(str(v))
-        )
-        
+        self.font_size_card.slider.valueChanged.connect(self._on_font_size_changed)
+
         # Acrylic effect toggle
+        acrylic_config_item = DummyConfigItem(value=ui_config.enable_acrylic)
         self.acrylic_card = SwitchSettingCard(
             icon=FluentIcon.TRANSPARENT,
             title="Acrylic Effect",
             content="Enable translucent window effect (requires restart)",
-            configItem=None,
+            configItem=acrylic_config_item,
             parent=self.ui_group
         )
         self.acrylic_card.switchButton.setChecked(ui_config.enable_acrylic)
-        
+
         # Add cards to group
         self.ui_group.addSettingCard(self.theme_card)
         self.ui_group.addSettingCard(self.font_size_card)
         self.ui_group.addSettingCard(self.acrylic_card)
-        
+
         self.vBoxLayout.addWidget(self.ui_group)
     
     def _create_network_settings(self):
@@ -191,23 +374,22 @@ class SettingsPage(ScrollArea):
         self.dht_card.switchButton.setChecked(network_config.enable_dht)
         
         # Listen port
+        port_config_item = DummyConfigItem(value=network_config.listen_port, range_tuple=(1024, 65535))
         self.port_card = RangeSettingCard(
-            configItem=None,
+            configItem=port_config_item,
             icon=FluentIcon.CONNECT,
             title="Listen Port",
             content="Network port for incoming connections",
             parent=self.network_group
         )
-        self.port_card.slider.setRange(1024, 65535)
-        self.port_card.slider.setValue(network_config.listen_port)
-        self.port_card.valueLabel.setText(str(network_config.listen_port))
         self.port_card.slider.valueChanged.connect(
             lambda v: self.port_card.valueLabel.setText(str(v))
         )
         
         # Max peers
+        max_peers_config_item = DummyConfigItem(value=network_config.max_peers, range_tuple=(1, 100))
         self.max_peers_card = RangeSettingCard(
-            configItem=None,
+            configItem=max_peers_config_item,
             icon=FluentIcon.PEOPLE,
             title="Maximum Peers",
             content="Maximum number of simultaneous peer connections",
@@ -303,7 +485,7 @@ class SettingsPage(ScrollArea):
         # Storage usage display
         self.storage_usage_card = PushSettingCard(
             text="Refresh",
-            icon=FluentIcon.STORAGE,
+            icon=FluentIcon.DOWNLOAD,
             title="Storage Usage",
             content="Calculating...",
             parent=self.storage_group
@@ -312,8 +494,9 @@ class SettingsPage(ScrollArea):
         self._update_storage_usage()  # Initial calculation
         
         # Max attachment size
+        max_attachment_config_item = DummyConfigItem(value=storage_config.max_attachment_size, range_tuple=(1, 100))
         self.max_attachment_card = RangeSettingCard(
-            configItem=None,
+            configItem=max_attachment_config_item,
             icon=FluentIcon.DOCUMENT,
             title="Max Attachment Size (MB)",
             content="Maximum file size for attachments",
@@ -328,8 +511,9 @@ class SettingsPage(ScrollArea):
         )
         
         # Cache size
+        cache_size_config_item = DummyConfigItem(value=storage_config.cache_size, range_tuple=(50, 1000))
         self.cache_size_card = RangeSettingCard(
-            configItem=None,
+            configItem=cache_size_config_item,
             icon=FluentIcon.FOLDER,
             title="Cache Size (GB)",
             content="Maximum cache size for attachments",
@@ -358,8 +542,9 @@ class SettingsPage(ScrollArea):
         self.sync_group = SettingCardGroup("Synchronization", self.view)
         
         # Sync interval
+        sync_interval_config_item = DummyConfigItem(value=sync_config.interval, range_tuple=(1, 60))
         self.sync_interval_card = RangeSettingCard(
-            configItem=None,
+            configItem=sync_interval_config_item,
             icon=FluentIcon.SYNC,
             title="Sync Interval (seconds)",
             content="How often to synchronize with peers",
@@ -373,8 +558,9 @@ class SettingsPage(ScrollArea):
         )
         
         # Batch size
+        batch_size_config_item = DummyConfigItem(value=sync_config.batch_size, range_tuple=(10, 500))
         self.batch_size_card = RangeSettingCard(
-            configItem=None,
+            configItem=batch_size_config_item,
             icon=FluentIcon.DOWNLOAD,
             title="Batch Size",
             content="Number of posts to sync at once",
@@ -393,37 +579,7 @@ class SettingsPage(ScrollArea):
         
         self.vBoxLayout.addWidget(self.sync_group)
     
-    def _create_about_section(self):
-        """Create about section."""
-        self.about_group = SettingCardGroup("About", self.view)
-        
-        # Application info
-        from qfluentwidgets import HyperlinkCard
-        
-        self.app_info_card = PushSettingCard(
-            text="",
-            icon=FluentIcon.INFO,
-            title="P2P Encrypted BBS",
-            content="Version 1.0.0 - A decentralized bulletin board system",
-            parent=self.about_group
-        )
-        self.app_info_card.button.hide()  # No button needed
-        
-        # License info
-        self.license_card = PushSettingCard(
-            text="",
-            icon=FluentIcon.CERTIFICATE,
-            title="License",
-            content="Open Source - MIT License",
-            parent=self.about_group
-        )
-        self.license_card.button.hide()
-        
-        # Add cards to group
-        self.about_group.addSettingCard(self.app_info_card)
-        self.about_group.addSettingCard(self.license_card)
-        
-        self.vBoxLayout.addWidget(self.about_group)
+
     
     def _create_save_button(self):
         """Create save button at the bottom."""
@@ -445,25 +601,166 @@ class SettingsPage(ScrollArea):
     
     def _on_theme_changed(self, theme_text: str):
         """
-        Handle theme change.
+        Handle theme change and apply immediately.
         
         Args:
             theme_text: Theme name ("Dark", "Light", or "Auto")
         """
         try:
             if theme_text == "Dark":
+                GhostTheme.apply_theme(Theme.DARK)
                 self.theme_changed.emit(Theme.DARK)
             elif theme_text == "Light":
+                GhostTheme.apply_theme(Theme.LIGHT)
                 self.theme_changed.emit(Theme.LIGHT)
             else:
-                # Auto theme - use system default
-                # For now, default to dark
+                # Auto theme - use system default, for now default to dark
+                GhostTheme.apply_theme(Theme.DARK)
                 self.theme_changed.emit(Theme.DARK)
             
             logger.info(f"Theme changed to: {theme_text}")
             
         except Exception as e:
             logger.error(f"Failed to change theme: {e}")
+    
+    def _on_font_size_changed(self, value: int):
+        """
+        Handle font size change and apply immediately.
+        
+        Args:
+            value: New font size
+        """
+        try:
+            self.font_size_card.valueLabel.setText(str(value))
+            GhostTheme.set_font_size(value)
+            logger.info(f"Font size changed to: {value}")
+        except Exception as e:
+            logger.error(f"Failed to change font size: {e}")
+
+    def _on_save_settings(self):
+        """Save all settings to configuration and active profile.
+
+        Profile-backed fields:
+            - display_name
+            - shared_folder
+
+        Other fields remain in the YAML config via ConfigManager.
+        """
+        try:
+            # Avatar / display name and shared folder (profile-backed)
+            if hasattr(self, "_settings_header") and self._settings_header:
+                avatar = self._settings_header.get_avatar_name()
+                shared = self._settings_header.get_shared_folder()
+
+                # Update profile object
+                if avatar:
+                    self.profile.display_name = avatar
+                if shared:
+                    self.profile.shared_folder = shared
+
+                # Persist profile to DB
+                try:
+                    self.db_manager.update_profile(self.profile)
+                    logger.info(
+                        "Updated profile %s (display_name=%r, shared_folder=%r)",
+                        getattr(self.profile, "id", "<unknown>"),
+                        self.profile.display_name,
+                        self.profile.shared_folder,
+                    )
+                except Exception as exc:  # noqa: BLE001
+                    logger.error(f"Failed to update profile: {exc}")
+
+                # Also mirror into config for backward compatibility
+                if avatar:
+                    self.config_manager.set_config("ui", "avatar_name", avatar)
+                if shared:
+                    self.config_manager.set_config("storage", "shared_folder", shared)
+
+            # Update UI settings
+            theme_text = self.theme_card.comboBox.currentText().lower()
+            self.config_manager.set_config("ui", "theme", theme_text)
+            self.config_manager.set_config(
+                "ui", "font_size", self.font_size_card.slider.value()
+            )
+            self.config_manager.set_config(
+                "ui",
+                "enable_acrylic",
+                self.acrylic_card.switchButton.isChecked(),
+            )
+
+            # Update network settings
+            self.config_manager.set_config(
+                "network", "enable_mdns", self.mdns_card.switchButton.isChecked()
+            )
+            self.config_manager.set_config(
+                "network", "enable_dht", self.dht_card.switchButton.isChecked()
+            )
+            self.config_manager.set_config(
+                "network", "listen_port", self.port_card.slider.value()
+            )
+            self.config_manager.set_config(
+                "network", "max_peers", self.max_peers_card.slider.value()
+            )
+
+            # Update security settings
+            self.config_manager.set_config(
+                "security",
+                "require_signature_verification",
+                self.signature_verification_card.switchButton.isChecked(),
+            )
+
+            # Update storage settings
+            max_attachment_mb = self.max_attachment_card.slider.value()
+            max_attachment_bytes = max_attachment_mb * 1024 * 1024
+            self.config_manager.set_config(
+                "storage", "max_attachment_size", max_attachment_bytes
+            )
+
+            cache_size_gb = self.cache_size_card.slider.value()
+            cache_size_bytes = max(0, cache_size_gb) * 1024 * 1024 * 1024
+            self.config_manager.set_config(
+                "storage", "cache_size", cache_size_bytes
+            )
+
+            # Update sync settings
+            self.config_manager.set_config(
+                "sync", "interval", self.sync_interval_card.slider.value()
+            )
+            self.config_manager.set_config(
+                "sync", "batch_size", self.batch_size_card.slider.value()
+            )
+
+            # Save to file
+            self.config_manager.save_config()
+
+            # Emit signal
+            self.settings_saved.emit()
+
+            # Show success notification
+            InfoBar.success(
+                title="Settings Saved",
+                content="Configuration has been saved successfully",
+                orient=Qt.Orientation.Horizontal,
+                isClosable=True,
+                position=InfoBarPosition.TOP_RIGHT,
+                duration=2000,
+                parent=self,
+            )
+
+            logger.info("Settings saved successfully")
+
+        except Exception as e:  # noqa: BLE001
+            logger.error(f"Failed to save settings: {e}")
+
+            InfoBar.error(
+                title="Save Failed",
+                content=f"Failed to save settings: {str(e)}",
+                orient=Qt.Orientation.Horizontal,
+                isClosable=True,
+                position=InfoBarPosition.TOP_RIGHT,
+                duration=3000,
+                parent=self,
+            )
     
     def _update_storage_usage(self):
         """Update storage usage display."""
@@ -545,72 +842,9 @@ class SettingsPage(ScrollArea):
         except Exception as e:
             logger.error(f"Failed to edit bootstrap nodes: {e}")
     
-    def _on_save_settings(self):
-        """Save all settings to configuration."""
-        try:
-            # Update UI settings
-            theme_text = self.theme_card.comboBox.currentText().lower()
-            self.config_manager.set_config("ui", "theme", theme_text)
-            self.config_manager.set_config("ui", "font_size", self.font_size_card.slider.value())
-            self.config_manager.set_config("ui", "enable_acrylic", self.acrylic_card.switchButton.isChecked())
-            
-            # Update network settings
-            self.config_manager.set_config("network", "enable_mdns", self.mdns_card.switchButton.isChecked())
-            self.config_manager.set_config("network", "enable_dht", self.dht_card.switchButton.isChecked())
-            self.config_manager.set_config("network", "listen_port", self.port_card.slider.value())
-            self.config_manager.set_config("network", "max_peers", self.max_peers_card.slider.value())
-            
-            # Update security settings
-            self.config_manager.set_config(
-                "security",
-                "require_signature_verification",
-                self.signature_verification_card.switchButton.isChecked()
-            )
-            
-            # Update storage settings
-            max_attachment_mb = self.max_attachment_card.slider.value()
-            max_attachment_bytes = max_attachment_mb * 1024 * 1024
-            self.config_manager.set_config("storage", "max_attachment_size", max_attachment_bytes)
-            
-            cache_size_gb = self.cache_size_card.slider.value()
-            cache_size_bytes = cache_size_gb * 1024 * 1024 * 1024
-            self.config_manager.set_config("storage", "cache_size", cache_size_bytes)
-            
-            # Update sync settings
-            self.config_manager.set_config("sync", "interval", self.sync_interval_card.slider.value())
-            self.config_manager.set_config("sync", "batch_size", self.batch_size_card.slider.value())
-            
-            # Save to file
-            self.config_manager.save_config()
-            
-            # Emit signal
-            self.settings_saved.emit()
-            
-            # Show success notification
-            InfoBar.success(
-                title="Settings Saved",
-                content="Configuration has been saved successfully",
-                orient=Qt.Orientation.Horizontal,
-                isClosable=True,
-                position=InfoBarPosition.TOP_RIGHT,
-                duration=2000,
-                parent=self
-            )
-            
-            logger.info("Settings saved successfully")
-            
-        except Exception as e:
-            logger.error(f"Failed to save settings: {e}")
-            
-            InfoBar.error(
-                title="Save Failed",
-                content=f"Failed to save settings: {str(e)}",
-                orient=Qt.Orientation.Horizontal,
-                isClosable=True,
-                position=InfoBarPosition.TOP_RIGHT,
-                duration=3000,
-                parent=self
-            )
+    # NOTE: Legacy duplicate _on_save_settings implementation removed.
+    # All save operations are handled by the main _on_save_settings method
+    # defined earlier in this class, which also persists profile data.
     
     def _on_export_identity(self):
         """Handle export identity button click."""

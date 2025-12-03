@@ -18,6 +18,7 @@ from qfluentwidgets import (
     InfoBarPosition,
     Theme,
     setTheme,
+    setThemeColor,
     isDarkTheme
 )
 
@@ -31,6 +32,8 @@ from core.notification_manager import (
     NotificationPriority,
     get_notification_manager
 )
+
+from ui.theme_utils import GhostTheme, get_navigation_styles, apply_window_theme
 
 
 logger = logging.getLogger(__name__)
@@ -63,11 +66,13 @@ class MainWindow(FluentWindow):
         thread_manager=None,
         chat_manager=None,
         error_handler: Optional[ErrorHandler] = None,
-        notification_manager: Optional[NotificationManager] = None
+        notification_manager: Optional[NotificationManager] = None,
+        profile=None,
+        db_manager=None
     ):
         """
         Initialize main window.
-        
+
         Args:
             config_manager: Configuration manager instance
             board_manager: Optional BoardManager instance
@@ -75,13 +80,17 @@ class MainWindow(FluentWindow):
             chat_manager: Optional ChatManager instance
             error_handler: Optional ErrorHandler instance (uses global if not provided)
             notification_manager: Optional NotificationManager instance (uses global if not provided)
+            profile: The currently logged in Profile instance
+            db_manager: Optional DBManager instance for profile management
         """
         super().__init__()
-        
+
         self.config_manager = config_manager
         self.board_manager = board_manager
         self.thread_manager = thread_manager
         self.chat_manager = chat_manager
+        self.profile = profile
+        self.db_manager = db_manager
         
         # Initialize error handler and notification manager
         self.error_handler = error_handler or get_error_handler()
@@ -97,6 +106,7 @@ class MainWindow(FluentWindow):
         self.event_loop = QtAsyncioEventLoop(QApplication.instance())
         
         # Page widgets (will be created by subclasses or set externally)
+        self.welcome_page: Optional[QWidget] = None
         self.boards_page: Optional[QWidget] = None
         self.chats_page: Optional[QWidget] = None
         self.peers_page: Optional[QWidget] = None
@@ -105,7 +115,8 @@ class MainWindow(FluentWindow):
         
         # Setup UI
         self._setup_window()
-        self._setup_navigation()
+        # NOTE: Navigation setup is delayed until all pages are created
+        # This is done via _setup_navigation() from main.py
         self._load_theme()
         self._connect_signals()
         
@@ -113,11 +124,23 @@ class MainWindow(FluentWindow):
     
     def _setup_window(self):
         """Configure main window properties."""
-        self.setWindowTitle("P2P Encrypted BBS")
+        self.setWindowTitle("GhostBBs")
         self.resize(1200, 800)
         
-        # Set window icon if available
-        # TODO: Add application icon
+        # Set window icon
+        from pathlib import Path
+        from PySide6.QtGui import QIcon
+        
+        # Path to the icon file
+        icon_path = Path("./glogo.jpeg")
+        
+        # Check if the file exists
+        if icon_path.exists():
+            # Set the window icon
+            self.setWindowIcon(QIcon(str(icon_path)))
+        else:
+            # Fallback icon or no icon
+            logger.warning(f"Icon file not found: {icon_path}")
         
         # Center window on screen
         screen = QApplication.primaryScreen().geometry()
@@ -127,57 +150,128 @@ class MainWindow(FluentWindow):
         self.move(x, y)
     
     def _setup_navigation(self):
-        """Set up navigation interface with sidebar items."""
-        # Add navigation items
-        
-        # Boards page
-        self.boards_page = self._create_placeholder_page("Boards")
+        """Set up navigation interface with proper pages and purple dark theme highlighting."""
+        # Configure purple theme for dark mode navigation
+        self._setup_purple_navigation_theme()
+
+        # Add Welcome/Home page first
+        self.addSubInterface(
+            self.welcome_page,
+            FluentIcon.HOME,
+            "Home",
+            NavigationItemPosition.TOP
+        )
+
+        # Add main navigation items with proper pages
         self.addSubInterface(
             self.boards_page,
             FluentIcon.FOLDER,
             "Boards",
             NavigationItemPosition.TOP
         )
-        
-        # Private Chats page
-        self.chats_page = self._create_placeholder_page("Private Chats")
+
         self.addSubInterface(
             self.chats_page,
             FluentIcon.CHAT,
             "Private Chats",
             NavigationItemPosition.TOP
         )
-        
-        # Peers page
-        self.peers_page = self._create_placeholder_page("Peers")
+
         self.addSubInterface(
             self.peers_page,
             FluentIcon.PEOPLE,
             "Peers",
             NavigationItemPosition.TOP
         )
-        
-        # Settings page (bottom of navigation)
-        self.settings_page = SettingsPage(self.config_manager)
-        self.addSubInterface(
-            self.settings_page,
-            FluentIcon.SETTING,
-            "Settings",
-            NavigationItemPosition.BOTTOM
-        )
-        
-        # About page (bottom of navigation)
-        self.about_page = self._create_placeholder_page("About")
+
+        # Bottom items: About (bottom), Settings, Login (top of bottom section)
+        # Add in reverse order since BOTTOM position prepends items
         self.addSubInterface(
             self.about_page,
             FluentIcon.INFO,
             "About",
             NavigationItemPosition.BOTTOM
         )
-        
-        # Set default page
-        self.stackedWidget.setCurrentWidget(self.boards_page)
-        
+
+        self.addSubInterface(
+            self.settings_page,
+            FluentIcon.SETTING,
+            "Settings",
+            NavigationItemPosition.BOTTOM
+        )
+
+        # Add Login button above Settings (shows current username)
+        # This is a clickable button, not a page, so we use addItem
+        login_text = self._get_login_button_text()
+        self.navigationInterface.addItem(
+            routeKey="login",
+            icon=FluentIcon.PEOPLE,
+            text=login_text,
+            onClick=self._on_login_clicked,
+            selectable=False,  # Not a page, just a button
+            position=NavigationItemPosition.BOTTOM,
+            tooltip="Switch profile or view login info"
+        )
+    
+    def _setup_purple_navigation_theme(self):
+        """Configure purple theme for dark mode navigation highlighting."""
+        # Apply purple highlighting for dark theme
+        if hasattr(self, 'navigationInterface'):
+            # Use centralized theme utilities
+            self.navigationInterface.setStyleSheet(get_navigation_styles())
+
+    def _get_login_button_text(self) -> str:
+        """Get the text for the Login navigation button showing current username."""
+        if self.profile and hasattr(self.profile, 'display_name') and self.profile.display_name:
+            return f"Login [{self.profile.display_name}]"
+        return "Login"
+
+    def _on_login_clicked(self):
+        """Handle Login button click - show profile selection dialog."""
+        if not self.db_manager:
+            logger.warning("Cannot switch profile: db_manager not available")
+            self.show_warning("Profile Switch", "Profile switching is not available.")
+            return
+
+        # Import here to avoid circular imports
+        from ui.login_window import LoginWindow
+
+        # Show login window for profile selection
+        login_window = LoginWindow(db=self.db_manager, parent=self)
+
+        if login_window.exec():
+            new_profile = login_window.selected_profile
+            if new_profile and new_profile.id != self.profile.id:
+                # Profile changed - inform user they need to restart
+                self.show_info(
+                    "Profile Changed",
+                    f"Switched to profile '{new_profile.display_name}'. "
+                    "Please restart the application to complete the switch."
+                )
+                # Update stored profile reference
+                self.profile = new_profile
+                # Update the login button text
+                self._update_login_button_text()
+
+    def _update_login_button_text(self):
+        """Update the Login button text with the current username."""
+        if hasattr(self, 'navigationInterface'):
+            # Update the item text
+            login_text = self._get_login_button_text()
+            # Access the navigation widget and update its text
+            widget = self.navigationInterface.widget("login")
+            if widget:
+                widget.setText(login_text)
+
+    def _set_default_page(self):
+        """Set the default page based on the profile type."""
+        if self.profile and getattr(self.profile, 'is_guest', False):
+            # If this is a guest profile, start with settings page
+            self.switch_to_settings()
+        else:
+            # Default to welcome page for regular profiles
+            self.switch_to_welcome()
+
         logger.debug("Navigation interface configured")
     
     def _create_placeholder_page(self, title: str) -> QWidget:
@@ -193,16 +287,18 @@ class MainWindow(FluentWindow):
             QWidget placeholder
         """
         from PySide6.QtWidgets import QLabel
-        
+
         widget = QWidget()
+        # Ensure the widget has a non-empty object name required by FluentWindow.addSubInterface
+        widget.setObjectName(title.replace(" ", "_").lower())
         layout = QVBoxLayout(widget)
-        
+
         label = QLabel(f"{title} Page\n\nComing soon...")
         label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         label.setStyleSheet("font-size: 18px; color: gray;")
-        
+
         layout.addWidget(label)
-        
+
         return widget
     
     def _load_theme(self):
@@ -219,22 +315,30 @@ class MainWindow(FluentWindow):
                 # Default to dark theme
                 self.apply_theme(Theme.DARK)
             
-            logger.info(f"Applied theme: {theme_name}")
+            # Set font size from config
+            GhostTheme.set_font_size(ui_config.font_size)
+            
+            # Apply our custom theme styles
+            apply_window_theme(self)
+            
+            logger.info(f"Applied theme: {theme_name}, font size: {ui_config.font_size}")
             
         except Exception as e:
             logger.error(f"Failed to load theme from config: {e}")
             # Fallback to dark theme
             self.apply_theme(Theme.DARK)
+            GhostTheme.set_font_size(14)
+            apply_window_theme(self)
     
     def apply_theme(self, theme: Theme):
         """
-        Apply a theme to the application.
+        Apply a theme to the application using centralized theme object.
         
         Args:
             theme: Theme to apply (Theme.LIGHT or Theme.DARK)
         """
         try:
-            setTheme(theme)
+            GhostTheme.apply_theme(theme)
             
             # Apply acrylic effect if enabled
             ui_config = self.config_manager.get_ui_config()
@@ -422,10 +526,37 @@ class MainWindow(FluentWindow):
         except Exception as e:
             logger.error(f"Failed to show info notification: {e}")
     
+    def set_welcome_page(self, page: QWidget):
+        """
+        Set the welcome/landing page widget.
+
+        Args:
+            page: Welcome page widget
+        """
+        if self.welcome_page:
+            index = self.stackedWidget.indexOf(self.welcome_page)
+            if index >= 0:
+                self.stackedWidget.removeWidget(self.welcome_page)
+
+        old_page = self.welcome_page
+
+        if not page.objectName():
+            page.setObjectName("welcomePage")
+
+        if old_page:
+            idx = self.stackedWidget.indexOf(old_page)
+            if idx >= 0:
+                self.stackedWidget.insertWidget(idx, page)
+                self.stackedWidget.removeWidget(old_page)
+        else:
+            self.stackedWidget.addWidget(page)
+
+        self.welcome_page = page
+
     def set_boards_page(self, page: QWidget):
         """
         Set the boards page widget.
-        
+
         Args:
             page: Boards page widget
         """
@@ -434,10 +565,23 @@ class MainWindow(FluentWindow):
             index = self.stackedWidget.indexOf(self.boards_page)
             if index >= 0:
                 self.stackedWidget.removeWidget(self.boards_page)
-        
+
+        old_page = self.boards_page
+
+        # Ensure page has an objectName (FluentWindow requires this)
+        if not page.objectName():
+            page.setObjectName("boardsPage")
+
+        # Replace placeholder in stacked widget if present
+        if old_page:
+            idx = self.stackedWidget.indexOf(old_page)
+            if idx >= 0:
+                self.stackedWidget.insertWidget(idx, page)
+                self.stackedWidget.removeWidget(old_page)
+        else:
+            self.stackedWidget.addWidget(page)
+
         self.boards_page = page
-        # Note: With FluentWindow, we need to use addSubInterface
-        # This method is for external page injection
     
     def set_chats_page(self, page: QWidget):
         """
@@ -451,6 +595,19 @@ class MainWindow(FluentWindow):
             if index >= 0:
                 self.stackedWidget.removeWidget(self.chats_page)
         
+        old_page = self.chats_page
+
+        if not page.objectName():
+            page.setObjectName("chatsPage")
+
+        if old_page:
+            idx = self.stackedWidget.indexOf(old_page)
+            if idx >= 0:
+                self.stackedWidget.insertWidget(idx, page)
+                self.stackedWidget.removeWidget(old_page)
+        else:
+            self.stackedWidget.addWidget(page)
+
         self.chats_page = page
     
     def set_peers_page(self, page: QWidget):
@@ -465,6 +622,19 @@ class MainWindow(FluentWindow):
             if index >= 0:
                 self.stackedWidget.removeWidget(self.peers_page)
         
+        old_page = self.peers_page
+
+        if not page.objectName():
+            page.setObjectName("peersPage")
+
+        if old_page:
+            idx = self.stackedWidget.indexOf(old_page)
+            if idx >= 0:
+                self.stackedWidget.insertWidget(idx, page)
+                self.stackedWidget.removeWidget(old_page)
+        else:
+            self.stackedWidget.addWidget(page)
+
         self.peers_page = page
     
     def set_settings_page(self, page: QWidget):
@@ -479,6 +649,19 @@ class MainWindow(FluentWindow):
             if index >= 0:
                 self.stackedWidget.removeWidget(self.settings_page)
         
+        old_page = self.settings_page
+
+        if not page.objectName():
+            page.setObjectName("settingsPage")
+
+        if old_page:
+            idx = self.stackedWidget.indexOf(old_page)
+            if idx >= 0:
+                self.stackedWidget.insertWidget(idx, page)
+                self.stackedWidget.removeWidget(old_page)
+        else:
+            self.stackedWidget.addWidget(page)
+
         self.settings_page = page
     
     def set_about_page(self, page: QWidget):
@@ -493,32 +676,51 @@ class MainWindow(FluentWindow):
             if index >= 0:
                 self.stackedWidget.removeWidget(self.about_page)
         
+        old_page = self.about_page
+
+        if not page.objectName():
+            page.setObjectName("aboutPage")
+
+        if old_page:
+            idx = self.stackedWidget.indexOf(old_page)
+            if idx >= 0:
+                self.stackedWidget.insertWidget(idx, page)
+                self.stackedWidget.removeWidget(old_page)
+        else:
+            self.stackedWidget.addWidget(page)
+
         self.about_page = page
     
+    def switch_to_welcome(self):
+        """Switch to welcome/home page."""
+        if self.welcome_page:
+            self.stackedWidget.setCurrentWidget(self.welcome_page)
+            self.navigation_changed.emit("welcome")
+
     def switch_to_boards(self):
         """Switch to boards page."""
         if self.boards_page:
             self.stackedWidget.setCurrentWidget(self.boards_page)
             self.navigation_changed.emit("boards")
-    
+
     def switch_to_chats(self):
         """Switch to private chats page."""
         if self.chats_page:
             self.stackedWidget.setCurrentWidget(self.chats_page)
             self.navigation_changed.emit("chats")
-    
+
     def switch_to_peers(self):
         """Switch to peers page."""
         if self.peers_page:
             self.stackedWidget.setCurrentWidget(self.peers_page)
             self.navigation_changed.emit("peers")
-    
+
     def switch_to_settings(self):
         """Switch to settings page."""
         if self.settings_page:
             self.stackedWidget.setCurrentWidget(self.settings_page)
             self.navigation_changed.emit("settings")
-    
+
     def switch_to_about(self):
         """Switch to about page."""
         if self.about_page:

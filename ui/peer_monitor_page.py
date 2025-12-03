@@ -22,12 +22,15 @@ from qfluentwidgets import (
     TableWidget,
     ToolButton,
     InfoBar,
-    InfoBarPosition
+    InfoBarPosition,
+    isDarkTheme
 )
 
 from core.network_manager import NetworkManager, PeerConnection, ConnectionState
 from core.db_manager import DBManager
 from models.database import PeerInfo
+from ui.theme_utils import GhostTheme, get_page_margins, get_card_margins, SPACING_MEDIUM, SPACING_LARGE
+from ui.hover_card import apply_hover_glow
 
 
 logger = logging.getLogger(__name__)
@@ -63,7 +66,9 @@ class PeerMonitorPage(ScrollArea):
         self,
         network_manager: Optional[NetworkManager] = None,
         db_manager: Optional[DBManager] = None,
-        parent=None
+        parent=None,
+        moderation_manager=None,
+        identity: Optional[str] = None
     ):
         """
         Initialize peer monitor page.
@@ -72,11 +77,15 @@ class PeerMonitorPage(ScrollArea):
             network_manager: NetworkManager instance for connection status
             db_manager: DBManager instance for peer info
             parent: Parent widget
+            moderation_manager: Optional ModerationManager instance (for compatibility)
+            identity: Optional peer identity (for compatibility)
         """
         super().__init__(parent)
         
         self.network_manager = network_manager
         self.db_manager = db_manager
+        self.moderation_manager = moderation_manager
+        self.identity = identity
         
         # Setup UI
         self._setup_ui()
@@ -95,25 +104,56 @@ class PeerMonitorPage(ScrollArea):
         """Set up page UI."""
         # Create main widget
         self.view = QWidget()
+        # Outer thin border to encapsulate internal cards
+        self.view.setObjectName("panelContainer")
         self.setWidget(self.view)
         self.setWidgetResizable(True)
         
+        # Apply dark theme styling
+        self.setStyleSheet(f"""
+            QWidget {{
+                background-color: {GhostTheme.get_background()};
+                color: {GhostTheme.get_text_primary()};
+            }}
+            QScrollArea#peerMonitorPage {{
+                border: none;
+                background-color: {GhostTheme.get_background()};
+            }}
+        """)
+        
         # Main layout
         self.main_layout = QVBoxLayout(self.view)
-        self.main_layout.setContentsMargins(20, 20, 20, 20)
-        self.main_layout.setSpacing(16)
+        margins = get_page_margins()
+        self.main_layout.setContentsMargins(*margins)
+        self.main_layout.setSpacing(SPACING_MEDIUM)
         
         # Header
         header_layout = QHBoxLayout()
         
         # Title
         title_label = SubtitleLabel("Peer Monitor")
+        title_label.setStyleSheet(f"color: {GhostTheme.get_text_primary()};")
         header_layout.addWidget(title_label)
         
         header_layout.addStretch()
         
         # Refresh button
         self.refresh_button = PushButton(FluentIcon.SYNC, "Refresh")
+        self.refresh_button.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {GhostTheme.get_purple_secondary()};
+                color: white;
+                border: none;
+                border-radius: 4px;
+                padding: 6px 12px;
+            }}
+            QPushButton:hover {{
+                background-color: {GhostTheme.get_purple_primary()};
+            }}
+            QPushButton:pressed {{
+                background-color: {GhostTheme.get_purple_tertiary()};
+            }}
+        """)
         self.refresh_button.clicked.connect(self.refresh_peers)
         header_layout.addWidget(self.refresh_button)
         
@@ -125,6 +165,27 @@ class PeerMonitorPage(ScrollArea):
         
         # Peers table
         self.peers_table = self._create_peers_table()
+        self.peers_table.setStyleSheet(f"""
+            QTableWidget {{
+                background-color: {GhostTheme.get_background()};
+                color: {GhostTheme.get_text_primary()};
+                gridline-color: {GhostTheme.get_tertiary_background()};
+                border: 1px solid {GhostTheme.get_tertiary_background()};
+            }}
+            QTableWidget::item {{
+                padding: 8px;
+                border-bottom: 1px solid {GhostTheme.get_tertiary_background()};
+            }}
+            QTableWidget::item:selected {{
+                background-color: {GhostTheme.get_purple_primary()};
+            }}
+            QHeaderView::section {{
+                background-color: {GhostTheme.get_secondary_background()};
+                color: {GhostTheme.get_text_primary()};
+                padding: 8px;
+                border: 1px solid {GhostTheme.get_tertiary_background()};
+            }}
+        """)
         self.main_layout.addWidget(self.peers_table)
         
         # Add stretch at bottom
@@ -137,8 +198,9 @@ class PeerMonitorPage(ScrollArea):
         """Create statistics card showing peer counts."""
         card = CardWidget()
         layout = QHBoxLayout(card)
-        layout.setContentsMargins(16, 16, 16, 16)
-        layout.setSpacing(32)
+        margins = get_card_margins()
+        layout.setContentsMargins(*margins)
+        layout.setSpacing(SPACING_LARGE)
         
         # Connected peers
         self.connected_label = self._create_stat_widget("Connected", "0", FluentIcon.CONNECT)
@@ -157,7 +219,9 @@ class PeerMonitorPage(ScrollArea):
         layout.addWidget(self.banned_label)
         
         layout.addStretch()
-        
+        # Apply hover glow to the stats card for consistent UI
+        apply_hover_glow(card, color=GhostTheme.get_purple_primary())
+
         return card
     
     def _create_stat_widget(self, label: str, value: str, icon: FluentIcon) -> QWidget:
@@ -172,9 +236,9 @@ class PeerMonitorPage(ScrollArea):
         value_label.setObjectName(f"{label.lower()}Value")
         layout.addWidget(value_label)
         
-        # Label
+        # Label - using centralized theme
         label_widget = CaptionLabel(label)
-        label_widget.setStyleSheet("color: gray;")
+        label_widget.setStyleSheet(f"color: {GhostTheme.get_text_tertiary()};")
         layout.addWidget(label_widget)
         
         return widget

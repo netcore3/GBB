@@ -30,6 +30,19 @@ from qfluentwidgets import (
     InfoBarPosition
 )
 
+from ui.theme_utils import (
+    GhostTheme,
+    get_metadata_styles,
+    get_empty_state_styles,
+    get_verified_styles,
+    get_unverified_styles,
+    get_error_text_styles,
+    get_page_margins,
+    get_card_margins,
+    SPACING_SMALL,
+    SPACING_MEDIUM,
+)
+from ui.hover_card import apply_hover_glow
 from logic.thread_manager import ThreadManager, ThreadManagerError
 from models.database import Thread, Post
 
@@ -70,41 +83,44 @@ class PostCard(CardWidget):
         self.is_verified = is_verified
         
         self._setup_ui()
+        # Apply hover glow for consistent UI
+        apply_hover_glow(self, color=GhostTheme.get_purple_primary())
     
     def _setup_ui(self):
         """Set up card UI."""
         # Main layout
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(16, 16, 16, 16)
-        layout.setSpacing(12)
+        margins = get_card_margins()
+        layout.setContentsMargins(*margins)
+        layout.setSpacing(SPACING_MEDIUM - 4)
         
         # Header row with author and timestamp
         header_layout = QHBoxLayout()
         header_layout.setSpacing(12)
-        
+
         # Author
         author_label = StrongBodyLabel(f"@{self.post.author_peer_id[:12]}...")
         header_layout.addWidget(author_label)
-        
-        # Signature verification indicator
+
+        # Signature verification indicator - using centralized theme
         if self.is_verified:
             verified_label = CaptionLabel("✓ Verified")
-            verified_label.setStyleSheet("color: green;")
+            verified_label.setStyleSheet(f"color: {GhostTheme.get_success_color()};")
         else:
             verified_label = CaptionLabel("⚠ Unverified")
-            verified_label.setStyleSheet("color: orange;")
+            verified_label.setStyleSheet(f"color: {GhostTheme.get_warning_color()};")
         header_layout.addWidget(verified_label)
-        
+
         header_layout.addStretch()
-        
+
         # Timestamp
         timestamp_str = self.post.created_at.strftime("%Y-%m-%d %H:%M:%S")
         time_label = CaptionLabel(timestamp_str)
-        time_label.setStyleSheet("color: gray;")
+        time_label.setStyleSheet(f"color: {GhostTheme.get_text_tertiary()};")
         header_layout.addWidget(time_label)
-        
+
         layout.addLayout(header_layout)
-        
+
         # Post content
         content_label = BodyLabel(self.post.content)
         content_label.setWordWrap(True)
@@ -113,27 +129,27 @@ class PostCard(CardWidget):
             Qt.TextInteractionFlag.TextSelectableByKeyboard
         )
         layout.addWidget(content_label)
-        
+
         # Attachments section (if any)
         if self.post.attachments:
             attachments_layout = QVBoxLayout()
             attachments_layout.setSpacing(8)
-            
+
             attachments_label = CaptionLabel(f"📎 {len(self.post.attachments)} attachment(s)")
-            attachments_label.setStyleSheet("color: gray;")
+            attachments_label.setStyleSheet(f"color: {GhostTheme.get_text_tertiary()};")
             attachments_layout.addWidget(attachments_label)
-            
+
             for attachment in self.post.attachments:
                 attachment_row = QHBoxLayout()
-                
+
                 # Filename
                 filename_label = BodyLabel(attachment.filename)
                 attachment_row.addWidget(filename_label)
-                
+
                 # File size
                 size_kb = attachment.file_size / 1024
                 size_label = CaptionLabel(f"({size_kb:.1f} KB)")
-                size_label.setStyleSheet("color: gray;")
+                size_label.setStyleSheet(f"color: {GhostTheme.get_text_tertiary()};")
                 attachment_row.addWidget(size_label)
                 
                 attachment_row.addStretch()
@@ -237,6 +253,8 @@ class PostComposer(CardWidget):
         self.attached_file_path: Optional[str] = None
         
         self._setup_ui()
+        # Apply hover glow so composer also has the same hover effect
+        apply_hover_glow(self, color=GhostTheme.get_purple_primary())
     
     def _setup_ui(self):
         """Set up composer UI."""
@@ -251,7 +269,7 @@ class PostComposer(CardWidget):
         
         # Reply indicator (hidden by default)
         self.reply_indicator = BodyLabel("")
-        self.reply_indicator.setStyleSheet("color: gray; font-style: italic;")
+        self.reply_indicator.setStyleSheet(f"color: {GhostTheme.get_text_tertiary()}; font-style: italic;")
         self.reply_indicator.hide()
         layout.addWidget(self.reply_indicator)
         
@@ -263,13 +281,13 @@ class PostComposer(CardWidget):
         
         # Character count
         self.char_count_label = CaptionLabel("0 / 10000 characters")
-        self.char_count_label.setStyleSheet("color: gray;")
+        self.char_count_label.setStyleSheet(f"color: {GhostTheme.get_text_tertiary()};")
         self.text_editor.textChanged.connect(self._update_char_count)
         layout.addWidget(self.char_count_label)
-        
+
         # Attachment indicator
         self.attachment_label = BodyLabel("")
-        self.attachment_label.setStyleSheet("color: gray;")
+        self.attachment_label.setStyleSheet(f"color: {GhostTheme.get_text_tertiary()};")
         self.attachment_label.hide()
         layout.addWidget(self.attachment_label)
         
@@ -302,11 +320,11 @@ class PostComposer(CardWidget):
         count = len(text)
         self.char_count_label.setText(f"{count} / 10000 characters")
         
-        # Change color if over limit
+        # Change color if over limit - using centralized theme
         if count > 10000:
-            self.char_count_label.setStyleSheet("color: red;")
+            self.char_count_label.setStyleSheet(f"color: {GhostTheme.get_error_color()};")
         else:
-            self.char_count_label.setStyleSheet("color: gray;")
+            self.char_count_label.setStyleSheet(f"color: {GhostTheme.get_text_tertiary()};")
     
     def set_reply_to(self, post_id: str, author_peer_id: str):
         """
@@ -471,8 +489,9 @@ class PostViewPage(ScrollArea):
         
         # Main layout
         self.main_layout = QVBoxLayout(self.view)
-        self.main_layout.setContentsMargins(20, 20, 20, 20)
-        self.main_layout.setSpacing(16)
+        margins = get_page_margins()
+        self.main_layout.setContentsMargins(*margins)
+        self.main_layout.setSpacing(SPACING_MEDIUM)
         
         # Header with back button and thread title
         header_layout = QHBoxLayout()
@@ -492,7 +511,7 @@ class PostViewPage(ScrollArea):
         
         # Thread info
         self.thread_info_label = BodyLabel("")
-        self.thread_info_label.setStyleSheet("color: gray;")
+        self.thread_info_label.setStyleSheet(f"color: {GhostTheme.get_text_tertiary()};")
         self.main_layout.addWidget(self.thread_info_label)
         
         # Separator
@@ -595,7 +614,7 @@ class PostViewPage(ScrollArea):
                 # Show empty state
                 empty_label = BodyLabel("No posts yet. Be the first to post!")
                 empty_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-                empty_label.setStyleSheet("color: gray; padding: 40px;")
+                empty_label.setStyleSheet(f"color: {GhostTheme.get_text_tertiary()}; padding: 40px;")
                 self.posts_layout.addWidget(empty_label)
             else:
                 # Add post cards
