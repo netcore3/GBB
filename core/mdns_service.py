@@ -9,6 +9,8 @@ import logging
 from typing import Callable, Optional, Dict, Any
 from zeroconf import ServiceBrowser, ServiceInfo, ServiceStateChange
 from zeroconf.asyncio import AsyncZeroconf
+import asyncio
+import functools
 from cryptography.hazmat.primitives.asymmetric import ed25519
 from cryptography.hazmat.primitives import serialization
 import socket
@@ -200,20 +202,36 @@ class mDNSService:
         try:
             # Unregister service
             if self.service_info and self.zeroconf:
-                await self.zeroconf.zeroconf.async_unregister_service(self.service_info)
-                logger.info("mDNS service unregistered")
-            
+                try:
+                    await self.zeroconf.zeroconf.async_unregister_service(self.service_info)
+                    logger.info("mDNS service unregistered")
+                except Exception as e:
+                    logger.warning(f"Failed to unregister service cleanly: {e}")
+
+            # Cancel browser first to ensure no callbacks run after zeroconf is closed
+            if self.browser:
+                try:
+                    # ServiceBrowser.cancel() will schedule async cancel on the loop and join the thread
+                    self.browser.cancel()
+                    logger.debug("mDNS browser cancelled")
+                except Exception as e:
+                    logger.warning(f"Error cancelling mDNS browser: {e}")
+                finally:
+                    self.browser = None
+
             # Close Zeroconf
             if self.zeroconf:
-                await self.zeroconf.async_close()
-                logger.info("mDNS service stopped")
-            
+                try:
+                    await self.zeroconf.async_close()
+                    logger.info("mDNS service stopped")
+                except Exception as e:
+                    logger.warning(f"Error closing AsyncZeroconf: {e}")
+
             # Clear references
             self.service_info = None
-            self.browser = None
             self.zeroconf = None
             self.discovered_peers.clear()
-            
+
         except Exception as e:
             logger.error(f"Error stopping mDNS service: {e}")
     
@@ -234,18 +252,77 @@ class mDNSService:
             state_change: Type of state change (Added, Removed, Updated)
         """
         try:
+            # If we've been stopped, ignore any late-arriving events. This
+            # prevents handling events after AsyncZeroconf has been closed
+            # which can raise "Zeroconf instance loop must be running" errors.
+            if not self.running:
+                logger.debug(f"Ignoring service state change for {name} because mDNS service is stopped")
+                return
+
+            # If zeroconf event loop is not running (race where browser still
+            # posts events while zeroconf loop is shutting down), ignore them.
+            loop = None
+            try:
+                loop = getattr(self.zeroconf, 'loop', None) or getattr(zeroconf, 'loop', None)
+            except Exception:
+                loop = None
+            if loop is not None:
+                try:
+                    if not loop.is_running():
+                        logger.debug(f"Ignoring service state change for {name} because zeroconf loop is not running")
+                        return
+                except Exception:
+                    # If we cannot query the loop state, be conservative and ignore
+                    logger.debug(f"Unable to determine zeroconf loop state for {name}; ignoring event")
+                    return
+            # If possible, schedule the heavy work onto the AsyncZeroconf/asyncio loop
+            # rather than executing on the ServiceBrowser thread. This avoids
+            # race conditions and native crashes when the zeroconf loop is
+            # shutting down.
+            import functools
+            try:
+                if loop is not None:
+                    # Prefer to schedule a coroutine on the AsyncZeroconf/asyncio loop
+                    # so that heavy or blocking work does not execute on the
+                    # ServiceBrowser thread. Use run_coroutine_threadsafe to
+                    # schedule the coroutine from this non-async thread.
+                    if state_change is ServiceStateChange.Added:
+                        asyncio.run_coroutine_threadsafe(
+                            self._process_peer_added(zeroconf, service_type, name),
+                            loop
+                        )
+                        return
+                    elif state_change is ServiceStateChange.Removed:
+                        asyncio.run_coroutine_threadsafe(
+                            self._process_peer_removed(name),
+                            loop
+                        )
+                        return
+                    elif state_change is ServiceStateChange.Updated:
+                        # Treat updates as re-discovery
+                        asyncio.run_coroutine_threadsafe(
+                            self._process_peer_added(zeroconf, service_type, name),
+                            loop
+                        )
+                        return
+            except Exception:
+                # If scheduling onto the loop fails for any reason, fall back
+                # to handling the event inline (best-effort defensive mode).
+                logger.debug("Failed to schedule service state change on event loop; falling back to inline handling")
+
+            # Inline fallback (runs on ServiceBrowser thread)
             if state_change is ServiceStateChange.Added:
-                self._handle_peer_added(zeroconf, service_type, name)
+                self._handle_peer_added_sync(zeroconf, service_type, name)
             elif state_change is ServiceStateChange.Removed:
                 self._handle_peer_removed(name)
             elif state_change is ServiceStateChange.Updated:
                 # Treat updates as re-discovery
-                self._handle_peer_added(zeroconf, service_type, name)
+                self._handle_peer_added_sync(zeroconf, service_type, name)
                 
         except Exception as e:
             logger.error(f"Error handling service state change for {name}: {e}")
     
-    def _handle_peer_added(
+    def _handle_peer_added_sync(
         self,
         zeroconf,
         service_type: str,
@@ -264,7 +341,12 @@ class mDNSService:
             # Try multiple times with increasing timeout
             info = None
             for attempt in range(3):
-                info = zeroconf.get_service_info(service_type, name, timeout=5000)
+                try:
+                    info = zeroconf.get_service_info(service_type, name, timeout=5000)
+                except RuntimeError as re:
+                    # Zeroconf loop may have been stopped concurrently; bail out
+                    logger.debug(f"Zeroconf runtime error when getting service info for {name}: {re}")
+                    return
                 if info is not None:
                     break
                 logger.debug(f"Attempt {attempt + 1}: Could not get service info for {name}, retrying...")
@@ -359,7 +441,12 @@ class mDNSService:
             
             # Notify callback
             if self.on_peer_discovered and is_new:
-                self.on_peer_discovered(peer_id, address, info.port, peer_info)
+                try:
+                    # Call the discovery callback defensively — user callbacks may
+                    # raise exceptions; ensure they don't crash the zeroconf thread.
+                    self.on_peer_discovered(peer_id, address, info.port, peer_info)
+                except Exception as e:
+                    logger.error(f"Error in on_peer_discovered callback for {peer_id[:8]}: {e}")
                 
         except Exception as e:
             logger.error(f"Error handling peer added for {name}: {e}")
@@ -394,6 +481,26 @@ class mDNSService:
                 
         except Exception as e:
             logger.error(f"Error handling peer removed for {name}: {e}")
+
+    async def _process_peer_added(self, zeroconf, service_type: str, name: str) -> None:
+        """Async wrapper to process a discovered peer on the asyncio loop.
+
+        Runs the synchronous handler in a threadpool executor to avoid
+        blocking the event loop.
+        """
+        try:
+            loop = asyncio.get_running_loop()
+            await loop.run_in_executor(None, functools.partial(self._handle_peer_added_sync, zeroconf, service_type, name))
+        except Exception as e:
+            logger.error(f"Error in async processing of peer added {name}: {e}")
+
+    async def _process_peer_removed(self, name: str) -> None:
+        """Async wrapper to process a peer removal on the asyncio loop."""
+        try:
+            loop = asyncio.get_running_loop()
+            await loop.run_in_executor(None, functools.partial(self._handle_peer_removed, name))
+        except Exception as e:
+            logger.error(f"Error in async processing of peer removed {name}: {e}")
     
     def _get_local_addresses(self) -> list:
         """

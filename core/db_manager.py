@@ -12,7 +12,17 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, Session
 from sqlalchemy.exc import IntegrityError, OperationalError
 
-from models.database import Base, Board, Thread, Post, PrivateMessage, Attachment, PeerInfo, ModerationAction
+from models.database import (
+    Base,
+    Profile,
+    Board,
+    Thread,
+    Post,
+    PrivateMessage,
+    Attachment,
+    PeerInfo,
+    ModerationAction,
+)
 
 
 class DBManager:
@@ -61,9 +71,96 @@ class DBManager:
         
         # Create all tables
         Base.metadata.create_all(self.engine)
+        # Lightweight migration: add new columns to boards table if missing
+        try:
+            import sqlite3
+            conn = sqlite3.connect(str(self.db_path))
+            cur = conn.cursor()
+            cur.execute("PRAGMA table_info('boards')")
+            cols = [r[1] for r in cur.fetchall()]
+            if 'welcome_message' not in cols:
+                cur.execute("ALTER TABLE boards ADD COLUMN welcome_message TEXT")
+            if 'image_path' not in cols:
+                cur.execute("ALTER TABLE boards ADD COLUMN image_path TEXT")
+            if 'is_private' not in cols:
+                cur.execute("ALTER TABLE boards ADD COLUMN is_private INTEGER DEFAULT 0 NOT NULL")
+            conn.commit()
+            conn.close()
+        except Exception:
+            # Non-fatal if migration fails; log via standard logging where DBManager is used
+            pass
         
         # Create session factory with expire_on_commit=False to avoid detached instance errors
         self.SessionLocal = sessionmaker(bind=self.engine, expire_on_commit=False)
+
+    # ------------------------------------------------------------------
+    # Profile operations
+    # ------------------------------------------------------------------
+
+    def get_all_profiles(self) -> List[Profile]:
+        """Return all local profiles ordered by last_used desc then created_at."""
+        with self.get_session() as session:
+            profiles = (
+                session.query(Profile)
+                .order_by(Profile.last_used.desc(), Profile.created_at.desc())
+                .all()
+            )
+            session.expunge_all()
+            return profiles
+
+    def get_profile(self, profile_id: str) -> Optional[Profile]:
+        """Fetch a single profile by its ID."""
+        with self.get_session() as session:
+            profile = session.query(Profile).filter(Profile.id == profile_id).first()
+            if profile:
+                session.expunge(profile)
+            return profile
+
+    def get_last_used_profile(self) -> Optional[Profile]:
+        """Return the most recently used profile, if any."""
+        with self.get_session() as session:
+            profile = (
+                session.query(Profile)
+                .order_by(Profile.last_used.desc())
+                .first()
+            )
+            if profile:
+                session.expunge(profile)
+            return profile
+
+    def create_profile(
+        self,
+        profile_id: str,
+        display_name: str,
+        avatar_path: Optional[str] = None,
+        shared_folder: Optional[str] = None,
+        peer_id: Optional[str] = None,
+        keystore_path: Optional[str] = None,
+    ) -> Profile:
+        """Create and persist a new profile and return the detached instance."""
+        with self.get_session() as session:
+            profile = Profile(
+                id=profile_id,
+                display_name=display_name,
+                avatar_path=avatar_path,
+                shared_folder=shared_folder,
+                peer_id=peer_id,
+                keystore_path=keystore_path,
+            )
+            session.add(profile)
+            session.flush()
+            session.expunge(profile)
+            return profile
+
+    def update_profile(self, profile: Profile) -> None:
+        """Persist changes to an existing profile.
+
+        The given instance may be detached; it will be merged inside a
+        transaction. Callers should update ``profile.last_used`` themselves
+        when appropriate.
+        """
+        with self.get_session() as session:
+            session.merge(profile)
     
     @contextmanager
     def get_session(self) -> Session:
@@ -103,6 +200,16 @@ class DBManager:
         """
         with self.get_session() as session:
             session.add(board)
+
+    def update_board(self, board: Board) -> None:
+        """
+        Update an existing board in the database. Uses merge to handle detached instances.
+
+        Args:
+            board: Board object with updated fields
+        """
+        with self.get_session() as session:
+            session.merge(board)
     
     def get_all_boards(self) -> List[Board]:
         """

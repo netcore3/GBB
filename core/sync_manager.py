@@ -13,7 +13,7 @@ from datetime import datetime
 from core.vector_clock import VectorClock, ClockComparison
 from core.network_manager import NetworkManager, Message
 from core.db_manager import DBManager
-from core.crypto_manager import CryptoManager, SignatureVerificationError
+from core.crypto_manager import CryptoManager, SignatureVerificationError, Identity
 from models.database import Post, Thread, Board
 
 
@@ -38,26 +38,60 @@ class SyncManager:
     - Periodic synchronization with connected peers
     """
     
-    def __init__(
-        self,
-        network_manager: NetworkManager,
-        db_manager: DBManager,
-        crypto_manager: CryptoManager,
-        local_peer_id: str
-    ):
+    def __init__(self, *args, **kwargs):
         """
         Initialize SyncManager.
-        
+
+        Backwards-compatible constructor that accepts the `identity` keyword
+        (either an `Identity` dataclass or a string peer_id) as used by
+        `main.py`, plus the crypto, db and network managers. Also accepts
+        optional `sync_interval` and `batch_size` parameters.
+
         Args:
-            network_manager: NetworkManager instance for peer communication
-            db_manager: DBManager instance for data persistence
+            identity: Identity object or peer_id string
             crypto_manager: CryptoManager instance for signature verification
-            local_peer_id: Local peer's ID
+            db_manager: DBManager instance for data persistence
+            network_manager: NetworkManager instance for peer communication
+            sync_interval: Interval (seconds) for periodic sync
+            batch_size: Max number of posts per batch
         """
+        # Parse parameters allowing both old positional-style calls:
+        #   SyncManager(network_manager, db_manager, crypto_manager, local_peer_id)
+        # and the new keyword-style calls used in main.py:
+        #   SyncManager(identity=..., crypto_manager=..., db_manager=..., network_manager=...)
+        identity = kwargs.get('identity', None)
+        crypto_manager = kwargs.get('crypto_manager', None)
+        db_manager = kwargs.get('db_manager', None)
+        network_manager = kwargs.get('network_manager', None)
+        sync_interval = kwargs.get('sync_interval', 30)
+        batch_size = kwargs.get('batch_size', 100)
+
+        # If identity not provided via kwargs, check positional args (old style)
+        if identity is None and len(args) >= 4:
+            # old positional ordering: network, db, crypto, local_peer_id
+            network_manager = args[0]
+            db_manager = args[1]
+            crypto_manager = args[2]
+            identity = args[3]
+
+        # Validate required components
+        if network_manager is None or db_manager is None or crypto_manager is None or identity is None:
+            raise ValueError("SyncManager requires network_manager, db_manager, crypto_manager and identity/local_peer_id")
+
+        # Resolve peer id from identity (support either Identity or raw str)
+        if isinstance(identity, Identity):
+            self.identity = identity
+            self.local_peer_id = identity.peer_id
+        else:
+            # Assume it's a peer_id string
+            self.identity = None
+            self.local_peer_id = str(identity)
+
         self.network = network_manager
         self.db = db_manager
         self.crypto = crypto_manager
-        self.local_peer_id = local_peer_id
+        self.sync_interval = sync_interval
+        self.batch_size = batch_size
         
         # Vector clocks for each board (board_id -> VectorClock)
         self.board_clocks: Dict[str, VectorClock] = {}
@@ -68,6 +102,14 @@ class SyncManager:
         
         # Register message handler with network manager
         self.network.on_message_received = self._handle_network_message
+
+    async def start(self) -> None:
+        """Start the sync manager background tasks."""
+        await self.start_periodic_sync(self.sync_interval)
+
+    async def stop(self) -> None:
+        """Stop the sync manager background tasks."""
+        await self.stop_periodic_sync()
     
     def _get_or_create_clock(self, board_id: str) -> VectorClock:
         """

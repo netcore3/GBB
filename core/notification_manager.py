@@ -110,6 +110,17 @@ class NotificationManager(QObject):
     def _init_sound(self):
         """Initialize notification sound effect."""
         try:
+            # Ensure a QCoreApplication exists before creating Qt multimedia objects.
+            # Creating QSoundEffect before a QApplication/QCoreApplication is constructed
+            # will raise: "QWidget: Must construct a QApplication before a QWidget".
+            from PySide6.QtCore import QCoreApplication
+
+            if QCoreApplication.instance() is None:
+                # Defer sound initialization until an application exists
+                self._sound_effect = None
+                logger.debug("QCoreApplication not yet available; deferring sound initialization")
+                return
+
             # Create sound effect
             self._sound_effect = QSoundEffect()
             

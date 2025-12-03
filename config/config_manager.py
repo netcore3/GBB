@@ -31,6 +31,7 @@ class UIConfig:
     enable_acrylic: bool = True
     font_size: int = 12
     language: str = "en"
+    avatar_name: str = ""
 
 
 @dataclass
@@ -45,6 +46,7 @@ class SecurityConfig:
 class StorageConfig:
     """Storage configuration settings."""
     db_path: str = "~/.bbs_p2p/data/bbs.db"
+    shared_folder: str = "~/.bbs_p2p/shared"
     max_attachment_size: int = 52428800  # 50 MB
     cache_size: int = 1073741824  # 1 GB
 
