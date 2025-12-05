@@ -1,3 +1,5 @@
+![About Application Screen](glogo.jpeg)
+
 # BBS P2P - Decentralized Encrypted Bulletin Board System
 
 A modern, peer-to-peer bulletin board system with end-to-end encryption, built with Python, Qt, and QFluentWidgets.
@@ -317,3 +319,4 @@ MIT License - see [LICENSE](LICENSE) for details.
 - UI powered by [QFluentWidgets](https://github.com/zhiyiYo/PyQt-Fluent-Widgets)
 - Cryptography via [cryptography](https://cryptography.io/)
 - mDNS discovery using [zeroconf](https://github.com/python-zeroconf/python-zeroconf)
+
