@@ -13,7 +13,7 @@ from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QTableW
 from qfluentwidgets import (
     ScrollArea,
     CardWidget,
-    PushButton,
+    PrimaryPushButton,
     FluentIcon,
     MessageBox,
     BodyLabel,
@@ -23,7 +23,8 @@ from qfluentwidgets import (
     ToolButton,
     InfoBar,
     InfoBarPosition,
-    isDarkTheme
+    isDarkTheme,
+    SwitchButton
 )
 
 from core.network_manager import NetworkManager, PeerConnection, ConnectionState
@@ -138,22 +139,7 @@ class PeerMonitorPage(ScrollArea):
         header_layout.addStretch()
         
         # Refresh button
-        self.refresh_button = PushButton(FluentIcon.SYNC, "Refresh")
-        self.refresh_button.setStyleSheet(f"""
-            QPushButton {{
-                background-color: {GhostTheme.get_purple_secondary()};
-                color: white;
-                border: none;
-                border-radius: 4px;
-                padding: 6px 12px;
-            }}
-            QPushButton:hover {{
-                background-color: {GhostTheme.get_purple_primary()};
-            }}
-            QPushButton:pressed {{
-                background-color: {GhostTheme.get_purple_tertiary()};
-            }}
-        """)
+        self.refresh_button = PrimaryPushButton(FluentIcon.SYNC, "Refresh")
         self.refresh_button.clicked.connect(self.refresh_peers)
         header_layout.addWidget(self.refresh_button)
         
@@ -250,11 +236,11 @@ class PeerMonitorPage(ScrollArea):
         # Set columns
         table.setColumnCount(6)
         table.setHorizontalHeaderLabels([
+            "Name",
             "Peer ID",
             "Status",
             "Last Seen",
-            "Trust",
-            "Ban",
+            "Ban/Trust",
             "Actions"
         ])
         
@@ -266,12 +252,13 @@ class PeerMonitorPage(ScrollArea):
         
         # Set column widths
         header = table.horizontalHeader()
-        header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)  # Peer ID
-        header.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)  # Status
-        header.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)  # Last Seen
-        header.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)  # Trust
-        header.setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)  # Ban
+        header.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)  # Name
+        header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)  # Peer ID
+        header.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)  # Status
+        header.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)  # Last Seen
+        header.setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)  # Ban/Trust
         header.setSectionResizeMode(5, QHeaderView.ResizeMode.ResizeToContents)  # Actions
+
         
         return table
     
@@ -310,7 +297,7 @@ class PeerMonitorPage(ScrollArea):
                     'address': peer_conn.address,
                     'port': peer_conn.port,
                     'last_seen': peer_conn.connected_at,
-                    'is_trusted': False,
+                    'is_trusted': True,
                     'is_banned': False,
                     'connected': True
                 }
@@ -324,7 +311,7 @@ class PeerMonitorPage(ScrollArea):
                         'address': peer_info.get('address', 'Unknown'),
                         'port': peer_info.get('port', 0),
                         'last_seen': peer_info.get('discovered_at', datetime.utcnow()),
-                        'is_trusted': False,
+                        'is_trusted': True,
                         'is_banned': False,
                         'connected': False
                     }
@@ -335,9 +322,11 @@ class PeerMonitorPage(ScrollArea):
                 db_peers = self.db_manager.get_all_peers()
                 for db_peer in db_peers:
                     if db_peer.peer_id in peers_data:
-                        peers_data[db_peer.peer_id]['is_trusted'] = db_peer.is_trusted
                         peers_data[db_peer.peer_id]['is_banned'] = db_peer.is_banned
                         peers_data[db_peer.peer_id]['last_seen'] = db_peer.last_seen
+                        peers_data[db_peer.peer_id]['display_name'] = db_peer.display_name or 'Unknown'
+                        if db_peer.is_banned:
+                            peers_data[db_peer.peer_id]['is_trusted'] = False
                     else:
                         # Peer in database but not currently connected/discovered
                         peers_data[db_peer.peer_id] = {
@@ -346,7 +335,8 @@ class PeerMonitorPage(ScrollArea):
                             'address': db_peer.address or 'Unknown',
                             'port': db_peer.port or 0,
                             'last_seen': db_peer.last_seen,
-                            'is_trusted': db_peer.is_trusted,
+                            'display_name': db_peer.display_name or 'Unknown',
+                            'is_trusted': not db_peer.is_banned,
                             'is_banned': db_peer.is_banned,
                             'connected': False
                         }
@@ -386,22 +376,31 @@ class PeerMonitorPage(ScrollArea):
         for row, peer in enumerate(sorted_peers):
             self.peers_table.insertRow(row)
             
+            # Name
+            name = peer.get('display_name', 'Unknown')
+            name_item = QTableWidgetItem(name)
+            self.peers_table.setItem(row, 0, name_item)
+            
             # Peer ID (truncated)
             peer_id_display = peer['peer_id'][:16] + "..." if len(peer['peer_id']) > 16 else peer['peer_id']
             peer_id_item = QTableWidgetItem(peer_id_display)
             peer_id_item.setToolTip(peer['peer_id'])  # Full ID in tooltip
-            self.peers_table.setItem(row, 0, peer_id_item)
+            self.peers_table.setItem(row, 1, peer_id_item)
             
-            # Status
-            status = peer['status']
-            status_item = QTableWidgetItem(status.capitalize())
-            if status == 'connected':
-                status_item.setForeground(Qt.GlobalColor.green)
-            elif status == 'discovered':
-                status_item.setForeground(Qt.GlobalColor.yellow)
+            # Status - show ban status if banned, otherwise connection status
+            if peer['is_banned']:
+                status_item = QTableWidgetItem("Banned")
+                status_item.setForeground(Qt.GlobalColor.red)
             else:
-                status_item.setForeground(Qt.GlobalColor.gray)
-            self.peers_table.setItem(row, 1, status_item)
+                status = peer['status']
+                status_item = QTableWidgetItem(status.capitalize())
+                if status == 'connected':
+                    status_item.setForeground(Qt.GlobalColor.green)
+                elif status == 'discovered':
+                    status_item.setForeground(Qt.GlobalColor.yellow)
+                else:
+                    status_item.setForeground(Qt.GlobalColor.gray)
+            self.peers_table.setItem(row, 2, status_item)
             
             # Last Seen
             last_seen = peer['last_seen']
@@ -420,25 +419,31 @@ class PeerMonitorPage(ScrollArea):
             else:
                 last_seen_str = "Unknown"
             last_seen_item = QTableWidgetItem(last_seen_str)
-            self.peers_table.setItem(row, 2, last_seen_item)
+            self.peers_table.setItem(row, 3, last_seen_item)
             
-            # Trust status
-            trust_item = QTableWidgetItem("✓" if peer['is_trusted'] else "")
-            trust_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-            if peer['is_trusted']:
-                trust_item.setForeground(Qt.GlobalColor.green)
-            self.peers_table.setItem(row, 3, trust_item)
-            
-            # Ban status
-            ban_item = QTableWidgetItem("✗" if peer['is_banned'] else "")
-            ban_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-            if peer['is_banned']:
-                ban_item.setForeground(Qt.GlobalColor.red)
-            self.peers_table.setItem(row, 4, ban_item)
+            # Ban/Trust switch
+            switch_widget = self._create_ban_switch_widget(peer)
+            self.peers_table.setCellWidget(row, 4, switch_widget)
             
             # Actions
             actions_widget = self._create_actions_widget(peer)
             self.peers_table.setCellWidget(row, 5, actions_widget)
+    
+    def _create_ban_switch_widget(self, peer: Dict) -> QWidget:
+        """Create ban/trust switch widget for a peer row. ON=Trusted, OFF=Banned."""
+        widget = QWidget()
+        layout = QHBoxLayout(widget)
+        layout.setContentsMargins(4, 4, 4, 4)
+        layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        
+        peer_id = peer['peer_id']
+        
+        switch = SwitchButton()
+        switch.setChecked(not peer['is_banned'])  # ON = trusted, OFF = banned
+        switch.checkedChanged.connect(lambda checked: self._on_ban_switch_toggled(peer_id, not checked))
+        layout.addWidget(switch)
+        
+        return widget
     
     def _create_actions_widget(self, peer: Dict) -> QWidget:
         """Create actions widget for a peer row."""
@@ -449,94 +454,110 @@ class PeerMonitorPage(ScrollArea):
         
         peer_id = peer['peer_id']
         
+        # Edit name button
+        edit_btn = ToolButton(FluentIcon.EDIT)
+        edit_btn.setToolTip("Edit name")
+        edit_btn.clicked.connect(lambda: self._on_edit_name_clicked(peer_id))
+        layout.addWidget(edit_btn)
+        
         # Chat button
         chat_btn = ToolButton(FluentIcon.CHAT)
         chat_btn.setToolTip("Start chat")
         chat_btn.clicked.connect(lambda: self._on_chat_clicked(peer_id))
         layout.addWidget(chat_btn)
         
-        # Trust button
-        if not peer['is_trusted']:
-            trust_btn = ToolButton(FluentIcon.ACCEPT)
-            trust_btn.setToolTip("Trust peer")
-            trust_btn.clicked.connect(lambda: self._on_trust_clicked(peer_id))
-            layout.addWidget(trust_btn)
-        
-        # Ban button
-        if not peer['is_banned']:
-            ban_btn = ToolButton(FluentIcon.CANCEL)
-            ban_btn.setToolTip("Ban peer")
-            ban_btn.clicked.connect(lambda: self._on_ban_clicked(peer_id))
-            layout.addWidget(ban_btn)
-        
         return widget
+    
+    def _on_ban_switch_toggled(self, peer_id: str, is_banned: bool):
+        """Handle ban/trust switch toggle. Switch ON=trusted, OFF=banned."""
+        try:
+            if self.db_manager:
+                peer_info = self.db_manager.get_peer_info(peer_id)
+                if not peer_info:
+                    # Need to get public key from network manager
+                    if self.network_manager and peer_id in self.network_manager.peers:
+                        peer_conn = self.network_manager.peers[peer_id]
+                        public_key = peer_conn.public_key if hasattr(peer_conn, 'public_key') else b''
+                    else:
+                        # Use placeholder if peer not connected
+                        public_key = b''
+                    
+                    from models.database import PeerInfo
+                    peer_info = PeerInfo(
+                        peer_id=peer_id,
+                        public_key=public_key,
+                        last_seen=datetime.utcnow()
+                    )
+                
+                peer_info.is_banned = is_banned
+                self.db_manager.save_peer_info(peer_info)
+                
+                if is_banned:
+                    self.peer_banned.emit(peer_id)
+                    logger.info(f"Banned peer: {peer_id[:8]}")
+                else:
+                    self.peer_trusted.emit(peer_id)
+                    logger.info(f"Trusted peer: {peer_id[:8]}")
+                
+                self.refresh_peers()
+        except Exception as e:
+            logger.error(f"Failed to toggle ban status: {e}")
+    
+    def _on_edit_name_clicked(self, peer_id: str):
+        """Handle edit name button click."""
+        try:
+            if not self.db_manager:
+                return
+            
+            peer_info = self.db_manager.get_peer_info(peer_id)
+            current_name = peer_info.display_name if peer_info and peer_info.display_name else ""
+            
+            # Create dialog
+            dialog = MessageBox("Edit Peer Name", "", self)
+            
+            # Add input field
+            from qfluentwidgets import LineEdit
+            name_input = LineEdit()
+            name_input.setPlaceholderText("Enter display name...")
+            name_input.setText(current_name)
+            name_input.setMaxLength(50)
+            dialog.textLayout.addWidget(name_input)
+            
+            if dialog.exec():
+                new_name = name_input.text().strip()
+                
+                if not peer_info:
+                    # Create new peer info if doesn't exist
+                    if self.network_manager and peer_id in self.network_manager.peers:
+                        peer_conn = self.network_manager.peers[peer_id]
+                        public_key = peer_conn.public_key if hasattr(peer_conn, 'public_key') else b''
+                    else:
+                        public_key = b''
+                    
+                    from models.database import PeerInfo
+                    peer_info = PeerInfo(
+                        peer_id=peer_id,
+                        public_key=public_key,
+                        last_seen=datetime.utcnow()
+                    )
+                
+                peer_info.display_name = new_name if new_name else None
+                self.db_manager.save_peer_info(peer_info)
+                
+                logger.info(f"Updated peer name: {peer_id[:8]} -> {new_name}")
+                self.refresh_peers()
+                
+        except Exception as e:
+            logger.error(f"Failed to edit peer name: {e}")
     
     def _on_chat_clicked(self, peer_id: str):
         """Handle chat button click."""
         logger.info(f"Chat requested with peer: {peer_id[:8]}")
         self.chat_requested.emit(peer_id)
     
-    def _on_trust_clicked(self, peer_id: str):
-        """Handle trust button click."""
-        try:
-            # Show confirmation dialog
-            msg_box = MessageBox(
-                "Trust Peer",
-                f"Do you want to trust this peer?\n\nPeer ID: {peer_id[:16]}...",
-                self
-            )
-            
-            if msg_box.exec():
-                logger.info(f"Trusting peer: {peer_id[:8]}")
-                self.peer_trusted.emit(peer_id)
-                
-                # Refresh display
-                self.refresh_peers()
-                
-                # Show notification
-                InfoBar.success(
-                    title="Peer Trusted",
-                    content="Peer has been added to trust list",
-                    orient=Qt.Orientation.Horizontal,
-                    isClosable=True,
-                    position=InfoBarPosition.TOP_RIGHT,
-                    duration=2000,
-                    parent=self
-                )
-        
-        except Exception as e:
-            logger.error(f"Failed to trust peer: {e}")
+
     
-    def _on_ban_clicked(self, peer_id: str):
-        """Handle ban button click."""
-        try:
-            # Show confirmation dialog
-            msg_box = MessageBox(
-                "Ban Peer",
-                f"Do you want to ban this peer?\n\nPeer ID: {peer_id[:16]}...\n\nBanned peers will be disconnected and blocked.",
-                self
-            )
-            
-            if msg_box.exec():
-                logger.info(f"Banning peer: {peer_id[:8]}")
-                self.peer_banned.emit(peer_id)
-                
-                # Refresh display
-                self.refresh_peers()
-                
-                # Show notification
-                InfoBar.warning(
-                    title="Peer Banned",
-                    content="Peer has been banned and will be disconnected",
-                    orient=Qt.Orientation.Horizontal,
-                    isClosable=True,
-                    position=InfoBarPosition.TOP_RIGHT,
-                    duration=2000,
-                    parent=self
-                )
-        
-        except Exception as e:
-            logger.error(f"Failed to ban peer: {e}")
+
     
     def closeEvent(self, event):
         """Handle widget close event."""

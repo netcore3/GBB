@@ -88,6 +88,11 @@ class GhostTheme:
         return cls.DARK_PURPLE_TERTIARY if isDarkTheme() else cls.LIGHT_PURPLE_TERTIARY
     
     @classmethod
+    def get_purple_border(cls):
+        """Get purple border color for current theme."""
+        return cls.DARK_PURPLE_BORDER if isDarkTheme() else cls.LIGHT_PURPLE_BORDER
+    
+    @classmethod
     def get_success_color(cls):
         """Get success (green) color for current theme."""
         return cls.DARK_SUCCESS if isDarkTheme() else cls.LIGHT_SUCCESS
@@ -100,6 +105,11 @@ class GhostTheme:
     @classmethod
     def get_error_color(cls):
         """Get error (red) color for current theme."""
+        return cls.DARK_ERROR if isDarkTheme() else cls.LIGHT_ERROR
+    
+    @classmethod
+    def get_red_accent(cls):
+        """Get red accent color for remove/delete actions."""
         return cls.DARK_ERROR if isDarkTheme() else cls.LIGHT_ERROR
     
     @classmethod

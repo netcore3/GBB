@@ -10,19 +10,19 @@ from typing import Optional
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import QWidget, QHBoxLayout, QStackedWidget, QVBoxLayout, QLabel
 from PySide6.QtGui import QFont
-from qfluentwidgets import InfoBar, InfoBarPosition, MessageBox, ComboBox, isDarkTheme, PrimaryPushButton, FluentIcon
+from qfluentwidgets import InfoBar, InfoBarPosition, MessageBox, ComboBox, isDarkTheme, PrimaryPushButton, FluentIcon, ScrollArea, PushButton, SubtitleLabel
 
 from logic.chat_manager import ChatManager
 from ui.chat_list_page import ChatListPage
 from ui.chat_widget import ChatWidget
 from core.db_manager import DBManager
-from ui.theme_utils import GhostTheme
+from ui.theme_utils import GhostTheme, get_page_margins, SPACING_MEDIUM
 
 
 logger = logging.getLogger(__name__)
 
 
-class PrivateChatsPage(QWidget):
+class PrivateChatsPage(ScrollArea):
     """
     Container page for private messaging.
     
@@ -62,34 +62,53 @@ class PrivateChatsPage(QWidget):
         logger.info("PrivateChatsPage initialized")
     
     def _setup_ui(self):
-        """Set up the page UI."""
-        # Outer layout contains a top bar (for global actions) and the
-        # main horizontal content area (chat list + chat panel).
-        outer_layout = QVBoxLayout(self)
-        outer_layout.setContentsMargins(0, 0, 0, 0)
-        outer_layout.setSpacing(0)
-
-        # Top bar with a right-aligned New Chat button
-        topbar = QHBoxLayout()
-        topbar.setContentsMargins(12, 8, 12, 8)
-        topbar.addStretch()
-        self.top_new_chat_btn = PrimaryPushButton(FluentIcon.ADD, "New Chat")
-        self.top_new_chat_btn.clicked.connect(self._on_new_chat_requested)
-        topbar.addWidget(self.top_new_chat_btn)
-        outer_layout.addLayout(topbar)
-
-        # Main horizontal layout (chat list + right panel)
-        main_layout = QHBoxLayout()
-        main_layout.setContentsMargins(0, 0, 0, 0)
-        main_layout.setSpacing(0)
+        """Set up page UI."""
+        # Create main widget
+        self.view = QWidget()
+        # Outer thin border to encapsulate internal content
+        self.view.setObjectName("panelContainer")
+        self.setWidget(self.view)
+        self.setWidgetResizable(True)
         
-        # Apply dark theme styling with new purple color palette
+        # Apply dark theme styling
         self.setStyleSheet(f"""
             QWidget {{
                 background-color: {GhostTheme.get_background()};
                 color: {GhostTheme.get_text_primary()};
             }}
+            QScrollArea#privateChatsPage {{
+                border: none;
+                background-color: {GhostTheme.get_background()};
+            }}
         """)
+        
+        # Main layout
+        self.main_layout = QVBoxLayout(self.view)
+        margins = get_page_margins()
+        self.main_layout.setContentsMargins(*margins)
+        self.main_layout.setSpacing(SPACING_MEDIUM)
+        
+        # Header
+        header_layout = QHBoxLayout()
+        
+        # Title
+        title_label = SubtitleLabel("Private Chats")
+        title_label.setStyleSheet(f"color: {GhostTheme.get_text_primary()};")
+        header_layout.addWidget(title_label)
+        
+        header_layout.addStretch()
+        
+        # New Chat button
+        self.new_chat_button = PrimaryPushButton(FluentIcon.ADD, "New Chat")
+        self.new_chat_button.clicked.connect(self._on_new_chat_requested)
+        header_layout.addWidget(self.new_chat_button)
+        
+        self.main_layout.addLayout(header_layout)
+        
+        # Main horizontal layout (chat list + right panel)
+        content_layout = QHBoxLayout()
+        content_layout.setContentsMargins(0, 0, 0, 0)
+        content_layout.setSpacing(0)
         
         self.chat_list = ChatListPage(self.chat_manager)
         self.chat_list.setFixedWidth(350)
@@ -97,6 +116,7 @@ class PrivateChatsPage(QWidget):
             QWidget {{
                 background-color: {GhostTheme.get_background()};
                 color: {GhostTheme.get_text_primary()};
+                border-right: 1px solid {GhostTheme.get_tertiary_background()};
             }}
             QFrame#chatListItem {{
                 border-bottom: 1px solid {GhostTheme.get_tertiary_background()};
@@ -111,7 +131,7 @@ class PrivateChatsPage(QWidget):
                 border-left: 4px solid {GhostTheme.get_purple_tertiary()};
             }}
         """)
-        main_layout.addWidget(self.chat_list)
+        content_layout.addWidget(self.chat_list)
         
         self.right_panel = QStackedWidget()
         
@@ -120,6 +140,8 @@ class PrivateChatsPage(QWidget):
             QWidget {{
                 background-color: {GhostTheme.get_background()};
                 color: {GhostTheme.get_text_primary()};
+                border: 1px solid {GhostTheme.get_tertiary_background()};
+                border-radius: 4px;
             }}
         """)
         self.right_panel.addWidget(self.empty_state)
@@ -131,15 +153,22 @@ class PrivateChatsPage(QWidget):
             QWidget {{
                 background-color: {GhostTheme.get_background()};
                 color: {GhostTheme.get_text_primary()};
+                border: 1px solid {GhostTheme.get_tertiary_background()};
+                border-radius: 4px;
             }}
         """)
         self.right_panel.addWidget(self.chat_container)
         
-        main_layout.addWidget(self.right_panel, stretch=1)
-
-        # Put the main (horizontal) layout under the outer vertical layout
-        outer_layout.addLayout(main_layout)
-
+        content_layout.addWidget(self.right_panel, stretch=1)
+        
+        self.main_layout.addLayout(content_layout)
+        
+        # Add stretch at bottom
+        self.main_layout.addStretch()
+        
+        # Style
+        self.setObjectName("privateChatsPage")
+        
         self.right_panel.setCurrentWidget(self.empty_state)
     
     def _create_empty_state(self):
@@ -235,7 +264,7 @@ class PrivateChatsPage(QWidget):
             if not peers:
                 self._show_info(
                     "No peers",
-                    "No known peers available. Connect to peers first.",
+                    "No peers available. Connect to peers first.",
                 )
                 return
 

@@ -112,6 +112,7 @@ class SettingsHeaderWidget(QWidget):
 
         # Browse button for choosing folder
         self.browse_btn = QPushButton("Browse")
+        self.browse_btn.setObjectName("PrimaryPushButton")
         self.browse_btn.clicked.connect(self._on_browse_clicked)
 
         layout.addWidget(self.shared_label)
@@ -254,11 +255,25 @@ class SettingsPage(ScrollArea):
             }}
         """)
         
-        # Add title
+        # Add title and save button in header
+        header_layout = QHBoxLayout()
+        header_layout.setContentsMargins(0, 0, 0, 0)
+        
         title_label = QLabel("Settings")
-        title_label.setObjectName("titleLabel")  # Add object name for styling
+        title_label.setObjectName("titleLabel")
         title_label.setStyleSheet(get_title_styles())
-        self.vBoxLayout.addWidget(title_label)
+        
+        self.save_button = PrimaryPushButton("Save Settings")
+        self.save_button.setFixedWidth(150)
+        self.save_button.clicked.connect(self._on_save_settings)
+        
+        header_layout.addWidget(title_label)
+        header_layout.addStretch(1)
+        header_layout.addWidget(self.save_button)
+        
+        header_widget = QWidget()
+        header_widget.setLayout(header_layout)
+        self.vBoxLayout.addWidget(header_widget)
         
         # Add avatar and shared folder header widget (profile-backed)
         try:
@@ -281,9 +296,6 @@ class SettingsPage(ScrollArea):
         self._create_storage_settings()
         self._create_sync_settings()
         
-        # Add save button at the bottom
-        self._create_save_button()
-        
         # Add stretch to push everything to the top
         self.vBoxLayout.addStretch(1)
     
@@ -291,7 +303,7 @@ class SettingsPage(ScrollArea):
         """Create UI settings group."""
         ui_config = self.config_manager.get_ui_config()
 
-        # Create group container
+        """ # Create group container
         self.ui_group = SettingCardGroup("User Interface", self.view)
 
         # Theme selector
@@ -346,7 +358,7 @@ class SettingsPage(ScrollArea):
         self.ui_group.addSettingCard(self.acrylic_card)
 
         self.vBoxLayout.addWidget(self.ui_group)
-    
+ """    
     def _create_network_settings(self):
         """Create network settings group."""
         network_config = self.config_manager.get_network_config()
@@ -581,24 +593,6 @@ class SettingsPage(ScrollArea):
     
 
     
-    def _create_save_button(self):
-        """Create save button at the bottom."""
-        button_widget = QWidget()
-        button_layout = QHBoxLayout(button_widget)
-        button_layout.setContentsMargins(20, 20, 20, 20)
-        
-        from qfluentwidgets import PrimaryPushButton
-        
-        self.save_button = PrimaryPushButton("Save Settings")
-        self.save_button.setFixedWidth(200)
-        self.save_button.clicked.connect(self._on_save_settings)
-        
-        button_layout.addStretch(1)
-        button_layout.addWidget(self.save_button)
-        button_layout.addStretch(1)
-        
-        self.vBoxLayout.addWidget(button_widget)
-    
     def _on_theme_changed(self, theme_text: str):
         """
         Handle theme change and apply immediately.
@@ -676,17 +670,20 @@ class SettingsPage(ScrollArea):
                 if shared:
                     self.config_manager.set_config("storage", "shared_folder", shared)
 
-            # Update UI settings
-            theme_text = self.theme_card.comboBox.currentText().lower()
-            self.config_manager.set_config("ui", "theme", theme_text)
-            self.config_manager.set_config(
-                "ui", "font_size", self.font_size_card.slider.value()
-            )
-            self.config_manager.set_config(
-                "ui",
-                "enable_acrylic",
-                self.acrylic_card.switchButton.isChecked(),
-            )
+            # Update UI settings (if they exist)
+            if hasattr(self, 'theme_card'):
+                theme_text = self.theme_card.comboBox.currentText().lower()
+                self.config_manager.set_config("ui", "theme", theme_text)
+            if hasattr(self, 'font_size_card'):
+                self.config_manager.set_config(
+                    "ui", "font_size", self.font_size_card.slider.value()
+                )
+            if hasattr(self, 'acrylic_card'):
+                self.config_manager.set_config(
+                    "ui",
+                    "enable_acrylic",
+                    self.acrylic_card.switchButton.isChecked(),
+                )
 
             # Update network settings
             self.config_manager.set_config(

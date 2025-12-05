@@ -229,143 +229,128 @@ class ChatListPage(QWidget):
         logger.info("ChatListPage initialized")
     
     def _setup_ui(self):
-        """Set up the page UI with layout matching PeerMonitorPage and BoardListPage."""
+        """Set up the page UI showing trusted peers list."""
         # Main vertical layout
         main_layout = QVBoxLayout(self)
-        margins = get_page_margins()
-        main_layout.setContentsMargins(*margins)
-        main_layout.setSpacing(SPACING_MEDIUM)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(0)
 
-        # Add outer border to the page (like PeerMonitorPage)
         self.setStyleSheet(f"""
             QWidget {{
                 background-color: {GhostTheme.get_background()};
-                border: 1.5px solid {GhostTheme.get_tertiary_background()};
-                border-radius: 10px;
-            }}
-            QScrollArea {{
-                background-color: {GhostTheme.get_background()};
-                border: none;
             }}
         """)
 
-        # Header with title and New Chat button (same row)
-        header_layout = QHBoxLayout()
-        header_layout.setSpacing(SPACING_MEDIUM)
-
-        # Title (top-left) — match PeerMonitorPage style
-        title_label = SubtitleLabel("Private Chats")
-        title_label.setStyleSheet(f"color: {GhostTheme.get_text_primary()};")
-        header_layout.addWidget(title_label)
-
-        header_layout.addStretch()
-
-        # New Chat button (PrimaryPushButton, like Create BBS)
-        self.new_chat_btn = PrimaryPushButton(FluentIcon.ADD, "New Chat")
-        self.new_chat_btn.setIconSize(QSize(18, 18))
-        try:
-            from ui.theme_utils import get_button_styles
-            self.new_chat_btn.setStyleSheet(get_button_styles("primary") + "\nQPushButton { padding: 8px 14px; text-align: left; }")
-        except Exception:
-            self.new_chat_btn.setStyleSheet(f"background-color: {GhostTheme.get_purple_primary()}; color: {GhostTheme.get_text_primary()}; padding: 8px 14px;")
-        self.new_chat_btn.clicked.connect(self.new_chat_requested.emit)
-        header_layout.addWidget(self.new_chat_btn)
-
-        main_layout.addLayout(header_layout)
-
-        # Scroll area for conversations (with border)
+        # Scroll area for peer list
         self.scroll_area = ScrollArea()
         self.scroll_area.setWidgetResizable(True)
         self.scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        self.scroll_area.setStyleSheet(f"""
-            QScrollArea {{
-                background-color: {GhostTheme.get_background()};
-                border: 1.5px solid {GhostTheme.get_tertiary_background()};
-                border-radius: 8px;
-            }}
-        """)
 
-        # Container for conversation cards
+        # Container for peer cards
         self.conversations_container = QWidget()
-        self.conversations_container.setStyleSheet(f"background-color: {GhostTheme.get_background()};")
         self.conversations_layout = QVBoxLayout(self.conversations_container)
         self.conversations_layout.setContentsMargins(0, 0, 0, 0)
-        self.conversations_layout.setSpacing(8)
+        self.conversations_layout.setSpacing(0)
         self.conversations_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
 
         self.scroll_area.setWidget(self.conversations_container)
-        main_layout.addWidget(self.scroll_area, 1)  # Expand to fill available space
+        main_layout.addWidget(self.scroll_area)
 
-        # Empty state label (shown when no conversations)
-        self.empty_label = QLabel("No conversations yet\n\nClick 'New Chat' to start messaging")
+        # Empty state label
+        self.empty_label = QLabel("No trusted peers\n\nConnect to peers first")
         self.empty_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.empty_label.setStyleSheet(f"color: {GhostTheme.get_text_tertiary()}; font-size: 14px;")
+        self.empty_label.setStyleSheet(f"color: {GhostTheme.get_text_tertiary()}; font-size: 14px; padding: 40px;")
         self.empty_label.hide()
-
         self.conversations_container.layout().addWidget(self.empty_label)
 
     def _load_conversations(self):
-        """Load all conversations from chat manager."""
+        """Load trusted peers list."""
         try:
-            # Clear existing cards
             self._clear_conversations()
 
-            # Get all conversation peer IDs
-            peer_ids = self.chat_manager.get_all_conversations()
+            # Get trusted peers from database
+            db_manager = self.chat_manager.db
+            peers = [p for p in db_manager.get_all_peers() if not p.is_banned]
 
-            if not peer_ids:
-                # Show empty state
-                self.scroll_area.hide()
+            if not peers:
                 self.empty_label.show()
-                logger.debug("No conversations to display")
+                logger.debug("No trusted peers to display")
                 return
 
-            # Hide empty state
             self.empty_label.hide()
-            self.scroll_area.show()
 
-            # Create conversation cards
-            conversations_data = []
+            # Create peer items
+            for peer in peers:
+                item = self._create_peer_item(peer)
+                self.conversations_layout.addWidget(item)
+                self.conversation_cards.append(item)
 
-            for peer_id in peer_ids:
-                # Get conversation messages
-                messages = self.chat_manager.get_conversation(peer_id)
-
-                if not messages:
-                    continue
-
-                # Get last message
-                last_message = messages[-1] if messages else None
-
-                # Get unread count
-                unread_count = self.chat_manager.get_unread_count(peer_id)
-
-                conversations_data.append({
-                    'peer_id': peer_id,
-                    'last_message': last_message,
-                    'unread_count': unread_count,
-                    'timestamp': last_message.created_at if last_message else datetime.min
-                })
-
-            # Sort by most recent activity
-            conversations_data.sort(key=lambda x: x['timestamp'], reverse=True)
-
-            # Create cards
-            for conv_data in conversations_data:
-                card = ConversationCard(
-                    peer_id=conv_data['peer_id'],
-                    last_message=conv_data['last_message'],
-                    unread_count=conv_data['unread_count']
-                )
-                card.clicked.connect(self._on_conversation_clicked)
-
-                self.conversations_layout.addWidget(card)
-                self.conversation_cards.append(card)
-
-            logger.info(f"Loaded {len(self.conversation_cards)} conversations")
+            logger.info(f"Loaded {len(self.conversation_cards)} trusted peers")
 
         except Exception as e:
-            logger.error(f"Failed to load conversations: {e}")
+            logger.error(f"Failed to load peers: {e}")
+    
+    def _create_peer_item(self, peer):
+        """Create a clickable peer list item with avatar."""
+        from PySide6.QtGui import QPixmap
+        from PySide6.QtWidgets import QFrame
+        
+        item = QFrame()
+        item.setFixedHeight(70)
+        item.setCursor(Qt.CursorShape.PointingHandCursor)
+        item.setStyleSheet(f"""
+            QFrame {{
+                background-color: {GhostTheme.get_background()};
+                border-bottom: 1px solid {GhostTheme.get_tertiary_background()};
+            }}
+            QFrame:hover {{
+                background-color: {GhostTheme.get_purple_primary()};
+            }}
+        """)
+        
+        layout = QHBoxLayout(item)
+        layout.setContentsMargins(12, 8, 12, 8)
+        layout.setSpacing(12)
+        
+        # Avatar
+        avatar_label = QLabel()
+        avatar_label.setFixedSize(48, 48)
+        avatar_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        
+        if hasattr(peer, 'avatar_path') and peer.avatar_path and Path(peer.avatar_path).exists():
+            pixmap = QPixmap(peer.avatar_path)
+            if not pixmap.isNull():
+                avatar_label.setPixmap(pixmap.scaled(48, 48, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
+        else:
+            avatar_label.setText("👤")
+            avatar_label.setStyleSheet("font-size: 32px;")
+        
+        avatar_label.setStyleSheet(avatar_label.styleSheet() + f"border-radius: 24px; background-color: {GhostTheme.get_secondary_background()};")
+        layout.addWidget(avatar_label)
+        
+        # Text info
+        text_layout = QVBoxLayout()
+        text_layout.setSpacing(2)
+        
+        # Username
+        name = peer.display_name or "Unknown"
+        name_label = StrongBodyLabel(name)
+        name_label.setStyleSheet(f"color: {GhostTheme.get_text_primary()}; font-size: 14px; font-weight: 600;")
+        text_layout.addWidget(name_label)
+        
+        # Peer ID
+        peer_id_display = peer.peer_id[:20] + "..." if len(peer.peer_id) > 20 else peer.peer_id
+        id_label = CaptionLabel(peer_id_display)
+        id_label.setStyleSheet(f"color: {GhostTheme.get_text_tertiary()}; font-size: 11px;")
+        text_layout.addWidget(id_label)
+        
+        layout.addLayout(text_layout, 1)
+        
+        # Store peer_id for click handling
+        item.peer_id = peer.peer_id
+        item.mousePressEvent = lambda e: self._on_conversation_clicked(peer.peer_id)
+        
+        return item
     
     def _clear_conversations(self):
         """Clear all conversation cards."""

@@ -418,3 +418,38 @@ class BoardManager:
         except Exception as e:
             logger.error(f"Failed to update board: {e}")
             raise BoardManagerError(f"Update failed: {e}")
+
+    def delete_board(self, board_id: str) -> None:
+        """
+        Delete a board from the database. Only the original creator may delete a board.
+        
+        Args:
+            board_id: ID of the board to delete
+            
+        Raises:
+            BoardManagerError: If board doesn't exist or deletion fails
+            PermissionError: If user is not the creator of the board
+        """
+        try:
+            board = self.get_board_by_id(board_id)
+            if not board:
+                raise BoardManagerError("Board not found")
+
+            if board.creator_peer_id != self.identity.peer_id:
+                raise PermissionError("Only the creator can delete this board")
+
+            # Remove from subscribed boards if subscribed
+            self.subscribed_boards.discard(board_id)
+            
+            # Delete from database
+            self.db.delete_board(board_id)
+            
+            logger.info(f"Deleted board '{board.name}' ({board.id[:8]})")
+            
+        except PermissionError:
+            raise
+        except BoardManagerError:
+            raise
+        except Exception as e:
+            logger.error(f"Failed to delete board: {e}")
+            raise BoardManagerError(f"Delete failed: {e}")

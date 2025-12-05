@@ -166,6 +166,7 @@ class PeerInfo(Base):
     __tablename__ = 'peers'
     
     peer_id = Column(String, primary_key=True)
+    display_name = Column(String, nullable=True)
     public_key = Column(LargeBinary, nullable=False)
     last_seen = Column(DateTime, nullable=False, default=datetime.utcnow)
     address = Column(String, nullable=True)
@@ -175,7 +176,7 @@ class PeerInfo(Base):
     reputation_score = Column(Integer, default=0)
     
     def __repr__(self):
-        return f"<PeerInfo(peer_id={self.peer_id}, trusted={self.is_trusted})>"
+        return f"<PeerInfo(peer_id={self.peer_id}, name={self.display_name}, trusted={self.is_trusted})>"
 
 
 class ModerationAction(Base):

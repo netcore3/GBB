@@ -521,6 +521,28 @@ def main():
         identity=identity.peer_id,
         image_manager=image_manager,
     )
+    
+    # Handle board double-click to show detail view
+    from ui.board_detail_page import BoardDetailPage
+    
+    def _on_board_double_clicked(board_id: str):
+        """Show board detail page when board is double-clicked."""
+        try:
+            board = board_manager.get_board_by_id(board_id)
+            if board:
+                detail_page = BoardDetailPage(
+                    board=board,
+                    db_manager=db_manager,
+                    thread_manager=thread_manager,
+                    profile=profile
+                )
+                detail_page.back_clicked.connect(lambda: main_window.stackedWidget.setCurrentWidget(boards_page))
+                main_window.stackedWidget.addWidget(detail_page)
+                main_window.stackedWidget.setCurrentWidget(detail_page)
+        except Exception as e:
+            logger.error(f"Failed to open board detail: {e}")
+    
+    boards_page.board_double_clicked.connect(_on_board_double_clicked)
     main_window.set_boards_page(boards_page)
 
     chats_page = PrivateChatsPage(

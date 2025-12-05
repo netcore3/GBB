@@ -33,13 +33,14 @@ class MessageBubble(QFrame):
     Chat bubble widget for displaying a single message.
     
     Displays:
+    - User avatar
     - Message content
     - Timestamp
     - Encryption indicator
-    - Sent/received styling
+    - Sent/received styling with unique colors
     """
     
-    def __init__(self, message: PrivateMessage, content: str, is_sent: bool, parent=None):
+    def __init__(self, message: PrivateMessage, content: str, is_sent: bool, sender_id: str, avatar_path: Optional[str] = None, parent=None):
         """
         Initialize message bubble.
         
@@ -47,6 +48,8 @@ class MessageBubble(QFrame):
             message: PrivateMessage object
             content: Decrypted message content
             is_sent: True if message was sent by us, False if received
+            sender_id: Peer ID of sender for color generation
+            avatar_path: Path to user avatar image
             parent: Parent widget
         """
         super().__init__(parent)
@@ -54,22 +57,54 @@ class MessageBubble(QFrame):
         self.message = message
         self.content = content
         self.is_sent = is_sent
+        self.sender_id = sender_id
+        self.avatar_path = avatar_path
         
         self._setup_ui()
     
+    def _get_user_color(self, peer_id: str) -> str:
+        """Generate unique color for user based on peer ID."""
+        import hashlib
+        hash_val = int(hashlib.md5(peer_id.encode()).hexdigest()[:6], 16)
+        hue = hash_val % 360
+        return f"hsl({hue}, 65%, 55%)"
+    
     def _setup_ui(self):
-        """Set up the bubble UI."""
-        # Main layout
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(12, 8, 12, 8)
-        layout.setSpacing(4)
+        """Set up the bubble UI with avatar."""
+        from PySide6.QtGui import QPixmap
+        
+        # Main horizontal layout for avatar + bubble
+        main_layout = QHBoxLayout(self)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(8)
+        
+        # Avatar
+        avatar_label = QLabel()
+        avatar_label.setFixedSize(36, 36)
+        avatar_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        
+        if self.avatar_path and Path(self.avatar_path).exists():
+            pixmap = QPixmap(self.avatar_path)
+            if not pixmap.isNull():
+                avatar_label.setPixmap(pixmap.scaled(36, 36, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
+        else:
+            avatar_label.setText("👤")
+            avatar_label.setStyleSheet("font-size: 24px;")
+        
+        avatar_label.setStyleSheet(avatar_label.styleSheet() + "border-radius: 18px; background-color: rgba(255,255,255,0.1);")
+        
+        # Bubble content
+        bubble_frame = QFrame()
+        bubble_layout = QVBoxLayout(bubble_frame)
+        bubble_layout.setContentsMargins(12, 8, 12, 8)
+        bubble_layout.setSpacing(4)
         
         # Message content
         content_label = BodyLabel(self.content)
         content_label.setWordWrap(True)
         content_label.setTextFormat(Qt.TextFormat.PlainText)
         content_label.setFont(QFont("Segoe UI", 10))
-        layout.addWidget(content_label)
+        bubble_layout.addWidget(content_label)
         
         # Bottom row: timestamp and encryption indicator
         bottom_layout = QHBoxLayout()
@@ -80,47 +115,46 @@ class MessageBubble(QFrame):
         encryption_label.setToolTip("End-to-end encrypted")
         bottom_layout.addWidget(encryption_label)
         
-        # Timestamp - using centralized theme
+        # Timestamp
         timestamp_str = self._format_timestamp(self.message.created_at)
         timestamp_label = CaptionLabel(timestamp_str)
-        timestamp_label.setStyleSheet(f"color: {GhostTheme.get_text_tertiary()};")
         bottom_layout.addWidget(timestamp_label)
-        
         bottom_layout.addStretch()
+        bubble_layout.addLayout(bottom_layout)
         
-        layout.addLayout(bottom_layout)
-        
-        # Style the bubble based on sent/received
+        # Style the bubble based on sent/received with unique colors
         if self.is_sent:
-            # Sent message (right side, new purple color)
-            self.setStyleSheet(f"""
+            main_layout.addStretch()
+            main_layout.addWidget(bubble_frame)
+            main_layout.addWidget(avatar_label)
+            
+            bubble_frame.setStyleSheet(f"""
                 QFrame {{
                     background-color: {GhostTheme.get_purple_primary()};
-                    border-radius: 12px;
-                    color: white;
+                    border-radius: 16px;
+                    border-top-right-radius: 4px;
                 }}
             """)
             content_label.setStyleSheet("color: white;")
             timestamp_label.setStyleSheet("color: rgba(255, 255, 255, 0.8);")
         else:
-            # Received message (left side, gray)
-            if isDarkTheme():
-                bg_color = GhostTheme.get_secondary_background()
-                text_color = GhostTheme.get_text_primary()
-            else:
-                bg_color = GhostTheme.get_secondary_background()
-                text_color = GhostTheme.get_text_primary()
+            main_layout.addWidget(avatar_label)
+            main_layout.addWidget(bubble_frame)
+            main_layout.addStretch()
             
-            self.setStyleSheet(f"""
+            user_color = self._get_user_color(self.sender_id)
+            bubble_frame.setStyleSheet(f"""
                 QFrame {{
-                    background-color: {bg_color};
-                    border-radius: 12px;
+                    background: {user_color};
+                    border-radius: 16px;
+                    border-top-left-radius: 4px;
                 }}
             """)
-            content_label.setStyleSheet(f"color: {text_color};")
+            content_label.setStyleSheet("color: white;")
+            timestamp_label.setStyleSheet("color: rgba(255, 255, 255, 0.9);")
         
-        # Set maximum width for bubbles
-        self.setMaximumWidth(500)
+        bubble_frame.setMaximumWidth(450)
+        self.setStyleSheet("background: transparent; border: none;")
     
     def _format_timestamp(self, dt: datetime) -> str:
         """
@@ -190,17 +224,27 @@ class ChatWidget(QWidget):
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(0)
         
+        # Set minimum height to maximize vertical space
+        self.setMinimumHeight(600)
+        
         # Header with peer info
         header = self._create_header()
         main_layout.addWidget(header)
         
-        # Messages scroll area
+        # Messages scroll area - maximize height
         self.scroll_area = ScrollArea()
         self.scroll_area.setWidgetResizable(True)
         self.scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.scroll_area.setStyleSheet(f"""
+            QScrollArea {{
+                background-color: {GhostTheme.get_background()};
+                border: none;
+            }}
+        """)
         
         # Container for message bubbles
         self.messages_container = QWidget()
+        self.messages_container.setStyleSheet(f"background-color: {GhostTheme.get_background()};")
         self.messages_layout = QVBoxLayout(self.messages_container)
         self.messages_layout.setContentsMargins(16, 16, 16, 16)
         self.messages_layout.setSpacing(8)
@@ -209,7 +253,7 @@ class ChatWidget(QWidget):
         self.scroll_area.setWidget(self.messages_container)
         main_layout.addWidget(self.scroll_area, stretch=1)
         
-        # Message input area
+        # Message input area at bottom
         input_area = self._create_input_area()
         main_layout.addWidget(input_area)
     
@@ -249,36 +293,37 @@ class ChatWidget(QWidget):
     
     def _create_input_area(self) -> QWidget:
         """
-        Create message input area with text field and buttons.
+        Create message input area with text field and buttons at bottom.
         
         Returns:
             Input area widget
         """
         input_container = QFrame()
-        input_container.setFixedHeight(80)
+        input_container.setFixedHeight(90)
         input_container.setStyleSheet(f"""
             QFrame {{
                 background-color: {GhostTheme.get_background()};
-                border-top: 1px solid {GhostTheme.get_tertiary_background()};
+                border-top: 2px solid {GhostTheme.get_tertiary_background()};
             }}
         """)
         
         layout = QHBoxLayout(input_container)
-        layout.setContentsMargins(16, 12, 16, 12)
+        layout.setContentsMargins(16, 16, 16, 16)
         layout.setSpacing(12)
         
         # File attachment button
         self.attach_btn = PushButton(FluentIcon.ATTACH, "")
-        self.attach_btn.setFixedSize(40, 40)
+        self.attach_btn.setFixedSize(48, 48)
         self.attach_btn.setToolTip("Attach file")
         self.attach_btn.setStyleSheet(f"""
             QPushButton {{
                 background-color: {GhostTheme.get_secondary_background()};
-                border-radius: 20px;
-                border: 1px solid {GhostTheme.get_tertiary_background()};
+                border-radius: 24px;
+                border: 2px solid {GhostTheme.get_tertiary_background()};
             }}
             QPushButton:hover {{
                 background-color: {GhostTheme.get_purple_primary()};
+                border-color: {GhostTheme.get_purple_primary()};
             }}
         """)
         self.attach_btn.clicked.connect(self._on_attach_file_clicked)
@@ -287,14 +332,17 @@ class ChatWidget(QWidget):
         # Message input field
         self.message_input = PlainTextEdit()
         self.message_input.setPlaceholderText("Type a message...")
-        self.message_input.setFixedHeight(56)
+        self.message_input.setFixedHeight(58)
+        self.message_input.setFocus()  # Auto-focus on input
         self.message_input.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         self.message_input.setStyleSheet(f"""
             QPlainTextEdit {{
                 background-color: {GhostTheme.get_secondary_background()};
-                border: 1px solid {GhostTheme.get_tertiary_background()};
+                border: 2px solid {GhostTheme.get_tertiary_background()};
                 border-radius: 8px;
-                padding: 8px;
+                padding: 12px;
+                color: {GhostTheme.get_text_primary()};
+                font-size: 13px;
             }}
             QPlainTextEdit:focus {{
                 border: 2px solid {GhostTheme.get_purple_primary()};
@@ -302,16 +350,17 @@ class ChatWidget(QWidget):
         """)
         layout.addWidget(self.message_input, stretch=1)
         
-        # Send button - relocated to far-right end of text input container
+        # Send button
         self.send_btn = PrimaryPushButton(FluentIcon.SEND, "Send")
-        self.send_btn.setFixedSize(80, 40)
+        self.send_btn.setFixedSize(90, 48)
         self.send_btn.setStyleSheet(f"""
             QPushButton {{
                 background-color: {GhostTheme.get_purple_primary()};
                 color: white;
                 border: none;
-                border-radius: 6px;
-                padding: 6px 12px;
+                border-radius: 8px;
+                font-size: 13px;
+                font-weight: bold;
             }}
             QPushButton:hover {{
                 background-color: {GhostTheme.get_purple_secondary()};
@@ -359,19 +408,18 @@ class ChatWidget(QWidget):
                     logger.error(f"Failed to decrypt message {message.id[:8]}: {e}")
                     content = "[Decryption failed]"
                 
-                # Create bubble
-                bubble = MessageBubble(message, content, is_sent)
+                # Get avatar path
+                avatar_path = None
+                try:
+                    peer_info = self.chat_manager.db.get_peer_info(message.sender_peer_id)
+                    if peer_info and hasattr(peer_info, 'avatar_path'):
+                        avatar_path = peer_info.avatar_path
+                except Exception:
+                    pass
                 
-                # Add to layout with alignment
-                bubble_layout = QHBoxLayout()
-                if is_sent:
-                    bubble_layout.addStretch()
-                    bubble_layout.addWidget(bubble)
-                else:
-                    bubble_layout.addWidget(bubble)
-                    bubble_layout.addStretch()
-                
-                self.messages_layout.addLayout(bubble_layout)
+                # Create bubble with avatar
+                bubble = MessageBubble(message, content, is_sent, message.sender_peer_id, avatar_path)
+                self.messages_layout.addWidget(bubble)
                 self.message_bubbles.append(bubble)
             
             # Scroll to bottom
@@ -482,19 +530,18 @@ class ChatWidget(QWidget):
             local_peer_id = self.chat_manager.identity.peer_id
             is_sent = (message.sender_peer_id == local_peer_id)
             
-            # Create bubble
-            bubble = MessageBubble(message, content, is_sent)
+            # Get avatar path
+            avatar_path = None
+            try:
+                peer_info = self.chat_manager.db.get_peer_info(message.sender_peer_id)
+                if peer_info and hasattr(peer_info, 'avatar_path'):
+                    avatar_path = peer_info.avatar_path
+            except Exception:
+                pass
             
-            # Add to layout with alignment
-            bubble_layout = QHBoxLayout()
-            if is_sent:
-                bubble_layout.addStretch()
-                bubble_layout.addWidget(bubble)
-            else:
-                bubble_layout.addWidget(bubble)
-                bubble_layout.addStretch()
-            
-            self.messages_layout.addLayout(bubble_layout)
+            # Create bubble with avatar
+            bubble = MessageBubble(message, content, is_sent, message.sender_peer_id, avatar_path)
+            self.messages_layout.addWidget(bubble)
             self.message_bubbles.append(bubble)
             
             # Scroll to bottom

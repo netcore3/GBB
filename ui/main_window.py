@@ -9,7 +9,7 @@ import logging
 from typing import Optional
 from PySide6.QtCore import Qt, Signal, QSize
 from PySide6.QtWidgets import QApplication, QWidget, QStackedWidget, QVBoxLayout
-from PySide6.QtGui import QIcon
+from PySide6.QtGui import QIcon, QPixmap
 from qfluentwidgets import (
     FluentWindow,
     NavigationItemPosition,
@@ -200,12 +200,13 @@ class MainWindow(FluentWindow):
             NavigationItemPosition.BOTTOM
         )
 
-        # Add Login button above Settings (shows current username)
+        # Add Login button above Settings (shows current username with avatar)
         # This is a clickable button, not a page, so we use addItem
         login_text = self._get_login_button_text()
+        login_icon = self._get_user_avatar_icon()
         self.navigationInterface.addItem(
             routeKey="login",
-            icon=FluentIcon.PEOPLE,
+            icon=login_icon,
             text=login_text,
             onClick=self._on_login_clicked,
             selectable=False,  # Not a page, just a button
@@ -225,6 +226,19 @@ class MainWindow(FluentWindow):
         if self.profile and hasattr(self.profile, 'display_name') and self.profile.display_name:
             return f"Login [{self.profile.display_name}]"
         return "Login"
+    
+    def _get_user_avatar_icon(self):
+        """Get the user's avatar icon or default icon."""
+        from pathlib import Path
+        
+        # Check if profile has an avatar
+        if self.profile and hasattr(self.profile, 'avatar_path') and self.profile.avatar_path:
+            avatar_path = Path(self.profile.avatar_path)
+            if avatar_path.exists():
+                return QIcon(str(avatar_path))
+        
+        # Default to PEOPLE icon
+        return FluentIcon.PEOPLE
 
     def _on_login_clicked(self):
         """Handle Login button click - show profile selection dialog."""
@@ -254,14 +268,16 @@ class MainWindow(FluentWindow):
                 self._update_login_button_text()
 
     def _update_login_button_text(self):
-        """Update the Login button text with the current username."""
+        """Update the Login button text and icon with the current username and avatar."""
         if hasattr(self, 'navigationInterface'):
-            # Update the item text
+            # Update the item text and icon
             login_text = self._get_login_button_text()
-            # Access the navigation widget and update its text
+            login_icon = self._get_user_avatar_icon()
+            # Access the navigation widget and update its text and icon
             widget = self.navigationInterface.widget("login")
             if widget:
                 widget.setText(login_text)
+                widget.setIcon(login_icon)
 
     def _set_default_page(self):
         """Set the default page based on the profile type."""

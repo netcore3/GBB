@@ -47,35 +47,39 @@ class BoardCard(CardWidget):
     
     Shows board name, description, creator, and last activity.
     Emits signal when clicked to navigate to thread list.
+    Shows "Remove" button for user-created boards.
     """
     
-    clicked = Signal(str)  # Emits board_id when clicked
+    board_clicked = Signal(str)  # Emits board_id when clicked
+    double_clicked = Signal(str)  # Emits board_id when double-clicked
+    remove_clicked = Signal(str)  # Emits board_id when remove button clicked
     
-    def __init__(self, board: Board, parent=None):
+    def __init__(self, board: Board, message_count: int = 0, current_user_id: Optional[str] = None, parent=None):
         """
         Initialize board card.
         
         Args:
             board: Board object to display
+            message_count: Number of messages in this board
+            current_user_id: ID of current user to check if they can remove this board
             parent: Parent widget
         """
         super().__init__(parent)
         
         self.board = board
+        self.message_count = message_count
+        self.current_user_id = current_user_id
         self._setup_ui()
     
     def _setup_ui(self):
         """Set up card UI."""
-        # Main layout
-        layout = QVBoxLayout(self)
+        # Main layout - horizontal to show image on left
+        main_layout = QHBoxLayout(self)
         margins = get_card_margins()
-        layout.setContentsMargins(*margins)
-        layout.setSpacing(SPACING_SMALL)
+        main_layout.setContentsMargins(*margins)
+        main_layout.setSpacing(12)
         
-        # Apply dark theme styling. Use a 2px border to match design and
-        # prepare for a glow effect on hover (the glow is implemented with a
-        # QGraphicsDropShadowEffect because Qt stylesheets don't support
-        # box-shadow).
+        # Apply dark theme styling
         self.setStyleSheet(f"""
             CardWidget {{
                 background-color: {GhostTheme.get_secondary_background()};
@@ -90,61 +94,123 @@ class BoardCard(CardWidget):
         )
 
         # Prepare drop shadow effect for hover glow
-        from PySide6.QtGui import QColor
+        from PySide6.QtGui import QColor, QPixmap
         glow_color = QColor(GhostTheme.get_purple_primary())
         glow_color.setAlpha(160)
         self._hover_shadow = QGraphicsDropShadowEffect(self)
         self._hover_shadow.setBlurRadius(24)
         self._hover_shadow.setColor(glow_color)
         self._hover_shadow.setOffset(0, 0)
-        # Board name (title)
+        
+        # Board image (left side)
+        if self.board.image_path and Path(self.board.image_path).exists():
+            img_label = QLabel()
+            pixmap = QPixmap(self.board.image_path)
+            if not pixmap.isNull():
+                img_label.setPixmap(pixmap.scaled(100, 100, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
+                img_label.setFixedSize(100, 100)
+                img_label.setStyleSheet("border-radius: 4px;")
+                main_layout.addWidget(img_label)
+        
+        # Content layout (right side)
+        layout = QVBoxLayout()
+        layout.setSpacing(SPACING_SMALL)
+        
+        # Board name (title) - white text
         name_label = SubtitleLabel(self.board.name)
         name_label.setWordWrap(True)
-        name_label.setStyleSheet(f"color: {GhostTheme.get_text_primary()};")
+        name_label.setStyleSheet("color: #FFFFFF; font-size: 16px; font-weight: bold;")
         layout.addWidget(name_label)
         
-        # Board description
+        # Board description - light gray text
         if self.board.description:
             desc_label = BodyLabel(self.board.description)
             desc_label.setWordWrap(True)
             desc_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
-            desc_label.setStyleSheet(f"color: {GhostTheme.get_text_secondary()};")
+            desc_label.setStyleSheet("color: #D3D3D3; font-size: 13px; line-height: 1.4;")
             layout.addWidget(desc_label)
-        # Welcome message (optional)
+        
+        # Welcome message (optional) - bigger font, light gray
         if getattr(self.board, 'welcome_message', None):
-            welcome_label = CaptionLabel(f"Welcome: {self.board.welcome_message}")
+            welcome_label = SubtitleLabel(f"💬 {self.board.welcome_message}")
             welcome_label.setWordWrap(True)
-            welcome_label.setStyleSheet(f"color: {GhostTheme.get_text_tertiary()};")
+            welcome_label.setStyleSheet(f"color: #E0E0E0; font-size: 14px; font-weight: 500; margin-top: 6px;")
             layout.addWidget(welcome_label)
         
-        # Metadata row
-        meta_layout = QHBoxLayout()
-        meta_layout.setSpacing(16)
+        # Bottom row with metadata and actions
+        bottom_layout = QHBoxLayout()
+        bottom_layout.setSpacing(16)
         
-        # Creator
+        # Left side - metadata
+        metadata_layout = QVBoxLayout()
+        metadata_layout.setSpacing(4)
+        
+        # Creator - light gray
         creator_label = CaptionLabel(f"Created by: {self.board.creator_peer_id[:8]}...")
-        creator_label.setStyleSheet(f"color: {GhostTheme.get_text_tertiary()};")
-        meta_layout.addWidget(creator_label)
+        creator_label.setStyleSheet("color: #B0B0B0;")
+        metadata_layout.addWidget(creator_label)
         
-        # Created date
+        # Created date - light gray
         created_str = self.board.created_at.strftime("%Y-%m-%d %H:%M")
         date_label = CaptionLabel(f"Created: {created_str}")
-        date_label.setStyleSheet(f"color: {GhostTheme.get_text_tertiary()};")
-        meta_layout.addWidget(date_label)
+        date_label.setStyleSheet("color: #B0B0B0;")
+        metadata_layout.addWidget(date_label)
         
-        meta_layout.addStretch()
+        # Message count - white
+        msg_count_label = CaptionLabel(f"💬 {self.message_count} message{'s' if self.message_count != 1 else ''}")
+        msg_count_label.setStyleSheet("color: #FFFFFF; font-weight: 600;")
+        metadata_layout.addWidget(msg_count_label)
         
-        layout.addLayout(meta_layout)
+        bottom_layout.addLayout(metadata_layout)
+        bottom_layout.addStretch()
+        
+        # Right side - remove button (only if user is creator)
+        if self._can_current_user_remove():
+            self.remove_button = PushButton("Remove")
+            self.remove_button.setFixedHeight(28)
+            self.remove_button.clicked.connect(self._on_remove_clicked)
+            self.remove_button.setStyleSheet(f"""
+                PushButton {{
+                    background-color: {GhostTheme.get_red_accent()};
+                    color: white;
+                    border: none;
+                    border-radius: 4px;
+                }}
+                PushButton:hover {{
+                    background-color: {GhostTheme.get_red_accent()};
+                    opacity: 0.8;
+                }}
+            """)
+            bottom_layout.addWidget(self.remove_button)
+        
+        layout.addLayout(bottom_layout)
+        main_layout.addLayout(layout, 1)
         
         # Make card clickable
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.setFixedHeight(140)
     
+    def _can_current_user_remove(self) -> bool:
+        """Check if the current user can remove this board."""
+        if not self.current_user_id:
+            return False
+        return self.board.creator_peer_id == self.current_user_id
+    
+    def _on_remove_clicked(self):
+        """Handle remove button click."""
+        self.remove_clicked.emit(self.board.id)
+    
     def mousePressEvent(self, event):
         """Handle mouse press to emit clicked signal."""
         if event.button() == Qt.MouseButton.LeftButton:
-            self.clicked.emit(self.board.id)
+            self.board_clicked.emit(self.board.id)
         super().mousePressEvent(event)
+    
+    def mouseDoubleClickEvent(self, event):
+        """Handle double-click to open board detail."""
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.double_clicked.emit(self.board.id)
+        super().mouseDoubleClickEvent(event)
 
     def enterEvent(self, event):
         """Show glow on hover."""
@@ -195,8 +261,8 @@ class CreateBoardDialog(MessageBox):
 
         self._setup_ui()
 
-        # Set fixed width to prevent layout shifts
-        self.widget.setFixedWidth(500)
+        # Set fixed width (30% wider than original 500px = 650px)
+        self.widget.setFixedWidth(650)
 
     def _setup_ui(self):
         """Set up dialog UI with polished layout."""
@@ -345,6 +411,7 @@ class BoardListPage(ScrollArea):
     """
     
     board_selected = Signal(str)  # Emits board_id
+    board_double_clicked = Signal(str)  # Emits board_id on double-click
     board_created = Signal(Board)  # Emits Board object
     
     def __init__(
@@ -431,18 +498,12 @@ class BoardListPage(ScrollArea):
 
         header_layout.addStretch()
 
-        # Create BBS button (use PrimaryPushButton to match New Chat styling)
+        # Create BBS button
         self.create_button = PrimaryPushButton(FluentIcon.ADD, "Create BBS")
         try:
             self.create_button.setIconSize(QSize(18, 18))
         except Exception:
             pass
-        # Use centralized primary button styles from theme utilities
-        try:
-            self.create_button.setStyleSheet(get_button_styles("primary") + "\nQPushButton { padding: 8px 14px; text-align: left; }")
-        except Exception:
-            # Fallback minimal styling
-            self.create_button.setStyleSheet(f"background-color: {GhostTheme.get_purple_primary()}; color: {GhostTheme.get_text_primary()}; padding: 8px 14px;")
         self.create_button.clicked.connect(self._on_create_board_clicked)
         header_layout.addWidget(self.create_button)
 
@@ -475,53 +536,29 @@ class BoardListPage(ScrollArea):
             }}
         """)
 
-        # All Boards tab
+        # All Boards tab - card view
         all_tab = QWidget()
         all_layout = QVBoxLayout(all_tab)
-        all_layout.setContentsMargins(0, 0, 0, 0)
-        # Add column headers (styled like peers table header)
-        header_row = QHBoxLayout()
-        header_row.setSpacing(8)
-        name_h = QLabel("Board Name")
-        desc_h = QLabel("Description")
-        creator_h = QLabel("Creator")
-        created_h = QLabel("Created")
-        for h in (name_h, desc_h, creator_h, created_h):
-            h.setStyleSheet(f"background-color: {GhostTheme.get_secondary_background()}; color: {GhostTheme.get_text_primary()}; padding: 8px; border: 1px solid {GhostTheme.get_tertiary_background()};")
-        header_row.addWidget(name_h, 2)
-        header_row.addWidget(desc_h, 3)
-        header_row.addWidget(creator_h, 1)
-        header_row.addWidget(created_h, 1)
-        all_layout.addLayout(header_row)
+        all_layout.setContentsMargins(8, 8, 8, 8)
+        
         self.boards_container = QWidget()
         self.boards_container.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.boards_layout = QVBoxLayout(self.boards_container)
         self.boards_layout.setSpacing(12)
+        self.boards_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
         all_layout.addWidget(self.boards_container)
         self.tab_widget.addTab(all_tab, "All Boards")
 
-        # My Boards tab (changed from "My BBS" to "My Boards")
+        # My Boards tab - card view
         my_tab = QWidget()
         my_layout = QVBoxLayout(my_tab)
-        my_layout.setContentsMargins(0, 0, 0, 0)
-        # Add column headers to My Boards tab (styled)
-        my_header_row = QHBoxLayout()
-        my_header_row.setSpacing(8)
-        my_name_h = QLabel("Board Name")
-        my_desc_h = QLabel("Description")
-        my_creator_h = QLabel("Creator")
-        my_created_h = QLabel("Created")
-        for h in (my_name_h, my_desc_h, my_creator_h, my_created_h):
-            h.setStyleSheet(f"background-color: {GhostTheme.get_secondary_background()}; color: {GhostTheme.get_text_primary()}; padding: 8px; border: 1px solid {GhostTheme.get_tertiary_background()};")
-        my_header_row.addWidget(my_name_h, 2)
-        my_header_row.addWidget(my_desc_h, 3)
-        my_header_row.addWidget(my_creator_h, 1)
-        my_header_row.addWidget(my_created_h, 1)
-        my_layout.addLayout(my_header_row)
+        my_layout.setContentsMargins(8, 8, 8, 8)
+        
         self.my_bbs_container = QWidget()
         self.my_bbs_container.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.my_bbs_layout = QVBoxLayout(self.my_bbs_container)
         self.my_bbs_layout.setSpacing(12)
+        self.my_bbs_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
         my_layout.addWidget(self.my_bbs_container)
         self.tab_widget.addTab(my_tab, "My Boards")
 
@@ -531,28 +568,39 @@ class BoardListPage(ScrollArea):
         self.setObjectName("boardListPage")
     
     def refresh_boards(self):
-        """Refresh the list of boards from database."""
+        """Refresh the list of boards from database, showing only public boards and excluding banned peers."""
         try:
             # Clear existing boards
             self._clear_boards()
             
             # Get all boards
-            boards = self.board_manager.get_all_boards()
+            all_boards = self.board_manager.get_all_boards()
             
-            if not boards:
+            # Filter out boards from banned peers
+            boards = self._filter_banned_boards(all_boards)
+            
+            # Filter to show only public boards (is_private=False or None)
+            public_boards = [b for b in boards if not getattr(b, 'is_private', False)]
+            
+            if not public_boards:
                 # Show empty state - using centralized theme
-                empty_label = BodyLabel("No boards yet. Create one to get started!")
+                empty_label = BodyLabel("No public boards yet. Create one to get started!")
                 empty_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
                 empty_label.setStyleSheet(f"color: {GhostTheme.get_text_tertiary()}; padding: 40px;")
                 self.boards_layout.addWidget(empty_label)
             else:
                 # Add board cards
-                for board in boards:
-                    card = BoardCard(board)
-                    card.clicked.connect(self._on_board_clicked)
+                for board in public_boards:
+                    # Get message count for board
+                    threads = self.board_manager.db.get_threads_for_board(board.id)
+                    message_count = len(threads)
+                    card = BoardCard(board, message_count, current_user_id=self.identity)
+                    card.board_clicked.connect(self._on_board_clicked)
+                    card.double_clicked.connect(self._on_board_double_clicked)
+                    card.remove_clicked.connect(self._on_remove_board_clicked)
                     self.boards_layout.addWidget(card)
             
-            logger.debug(f"Refreshed board list: {len(boards)} boards")
+            logger.debug(f"Refreshed board list: {len(public_boards)} public boards (filtered from {len(all_boards)} total)")
         except Exception as e:
             logger.error(f"Failed to refresh boards: {e}")
         finally:
@@ -576,6 +624,21 @@ class BoardListPage(ScrollArea):
             if item.widget():
                 item.widget().deleteLater()
 
+    def _filter_banned_boards(self, boards):
+        """Filter out boards created by banned peers."""
+        if not hasattr(self, 'board_manager') or not hasattr(self.board_manager, 'db'):
+            return boards
+        
+        try:
+            banned_peers = self.board_manager.db.get_all_peers()
+            banned_peer_ids = {p.peer_id for p in banned_peers if p.is_banned}
+            
+            filtered = [b for b in boards if b.creator_peer_id not in banned_peer_ids]
+            return filtered
+        except Exception as e:
+            logger.error(f"Failed to filter banned boards: {e}")
+            return boards
+    
     def refresh_my_bbs(self):
         """Populate the My BBS tab with boards created by the local identity."""
         try:
@@ -594,26 +657,20 @@ class BoardListPage(ScrollArea):
             if not my_boards:
                 empty = BodyLabel("You haven't created any BBS yet.")
                 empty.setAlignment(Qt.AlignmentFlag.AlignCenter)
-                empty.setStyleSheet("color: gray; padding: 24px;")
+                empty.setStyleSheet(f"color: {GhostTheme.get_text_tertiary()}; padding: 24px;")
                 self.my_bbs_layout.addWidget(empty)
                 return
 
+            # Display as cards like in All Boards tab
             for board in my_boards:
-                row = QWidget()
-                row_layout = QHBoxLayout(row)
-                row_layout.setContentsMargins(8, 8, 8, 8)
-
-                name = SubtitleLabel(board.name)
-                row_layout.addWidget(name)
-
-                row_layout.addStretch()
-
-                edit_btn = QPushButton("Edit")
-                edit_btn.setProperty("board_id", board.id)
-                edit_btn.clicked.connect(lambda _, b=board: self._on_edit_board_clicked(b))
-                row_layout.addWidget(edit_btn)
-
-                self.my_bbs_layout.addWidget(row)
+                # Get message count for board
+                threads = self.board_manager.db.get_threads_for_board(board.id)
+                message_count = len(threads)
+                card = BoardCard(board, message_count, current_user_id=self.identity)
+                card.board_clicked.connect(self._on_board_clicked)
+                card.double_clicked.connect(self._on_board_double_clicked)
+                card.remove_clicked.connect(self._on_remove_board_clicked)
+                self.my_bbs_layout.addWidget(card)
 
         except Exception as e:
             logger.error(f"Failed to refresh My BBS tab: {e}")
@@ -663,13 +720,14 @@ class BoardListPage(ScrollArea):
                     except Exception as e:
                         logger.warning(f"Failed to rename board image: {e}")
                 
-                # Refresh list
-                self.refresh_boards()
+                logger.info(f"Created board: {board.name}")
+                
+                # Force UI update to show the new board immediately
+                from PySide6.QtCore import QTimer
+                QTimer.singleShot(100, self.refresh_boards)
                 
                 # Emit signal
                 self.board_created.emit(board)
-                
-                logger.info(f"Created board: {board.name}")
                 
         except ValueError as e:
             logger.error(f"Invalid board input: {e}")
@@ -690,6 +748,50 @@ class BoardListPage(ScrollArea):
         """
         logger.info(f"Board selected: {board_id[:8]}")
         self.board_selected.emit(board_id)
+    
+    def _on_board_double_clicked(self, board_id: str):
+        """
+        Handle board card double-click to open detail view.
+        
+        Args:
+            board_id: ID of double-clicked board
+        """
+        logger.info(f"Board double-clicked: {board_id[:8]}")
+        self.board_double_clicked.emit(board_id)
+    
+    def _on_remove_board_clicked(self, board_id: str):
+        """Handle remove board button click."""
+        try:
+            board = self.board_manager.get_board_by_id(board_id)
+            if not board:
+                return
+            
+            msg_box = MessageBox(
+                "Remove Board",
+                f"Are you sure you want to remove '{board.name}'?\n\nThis will only remove it from your local database.",
+                self
+            )
+            
+            if msg_box.exec():
+                # Remove from database
+                self.board_manager.db.delete_board(board_id)
+                logger.info(f"Removed board: {board.name}")
+                
+                # Refresh display
+                self.refresh_boards()
+                
+                from qfluentwidgets import InfoBar, InfoBarPosition
+                InfoBar.success(
+                    title="Board Removed",
+                    content=f"Board '{board.name}' has been removed",
+                    orient=Qt.Orientation.Horizontal,
+                    isClosable=True,
+                    position=InfoBarPosition.TOP_RIGHT,
+                    duration=2000,
+                    parent=self
+                )
+        except Exception as e:
+            logger.error(f"Failed to remove board: {e}")
     
     def _show_error(self, title: str, message: str):
         """
