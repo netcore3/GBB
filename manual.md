@@ -23,7 +23,7 @@ GhostBBs is a decentralized, privacy-focused bulletin board system built on peer
 ### Profile Creation and Login
 Upon launching GhostBBs, you will be greeted by the Profile Selection screen. Because GhostBBs is decentralized, your "account" is actually a set of cryptographic keys stored locally on your device.
 
-![Profile Selection Screen](Screenshot_2025-12-02_20-19-19.png)
+![Profile Selection Screen]img/Screenshot_2025-12-02_20-19-19.png)
 
 * **Select Existing:** Click on an existing profile (e.g., "Default User") to log in.
 * **Create New:** Click the **"Create new profile"** button to generate a new identity.
@@ -35,7 +35,7 @@ Upon launching GhostBBs, you will be greeted by the Profile Selection screen. Be
 
 Once logged in, you will see the Welcome Dashboard. This serves as the central hub for navigation.
 
-![Welcome Dashboard](Screenshot_2025-12-02_20-26-21.png)
+![Welcome Dashboard](img/Screenshot_2025-12-02_20-26-21.png)
 
 The dashboard provides quick access to the three main modules of the application:
 
