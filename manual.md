@@ -49,7 +49,7 @@ The dashboard provides quick access to the three main modules of the application
 
 The **Peer Monitor** is essential for maintaining a healthy and safe connection to the network. Since there is no central moderator, you are in control of who you connect with.
 
-![Peer Monitor Screen](Screenshot_2025-12-03_23-11-53.png)
+![Peer Monitor Screen](img/Screenshot_2025-12-03_23-11-53.png)
 
 ### Understanding the Monitor
 At the top of the screen, you will see real-time statistics:
