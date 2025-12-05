@@ -7,7 +7,7 @@
 
 GhostBBs is a decentralized, privacy-focused bulletin board system built on peer-to-peer (P2P) networking principles. Unlike traditional social media or forums, GhostBBs has no central server. It enables users to create and participate in discussion boards with end-to-end encryption, ensuring data privacy and security.
 
-![About Application Screen](Screenshot_2025-12-02_20-26-45.png)
+![About Application Screen](img/Screenshot_2025-12-02_20-26-45.png)
 
 ### Key Features
 * **Fully Decentralized:** No central server; the network relies on users.
