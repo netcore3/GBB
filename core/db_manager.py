@@ -84,6 +84,13 @@ class DBManager:
                 cur.execute("ALTER TABLE boards ADD COLUMN image_path TEXT")
             if 'is_private' not in cols:
                 cur.execute("ALTER TABLE boards ADD COLUMN is_private INTEGER DEFAULT 0 NOT NULL")
+            
+            # Add display_name to peers table if missing
+            cur.execute("PRAGMA table_info('peers')")
+            peer_cols = [r[1] for r in cur.fetchall()]
+            if 'display_name' not in peer_cols:
+                cur.execute("ALTER TABLE peers ADD COLUMN display_name TEXT")
+            
             conn.commit()
             conn.close()
         except Exception:
@@ -239,6 +246,21 @@ class DBManager:
             if board:
                 session.expunge(board)
             return board
+    
+    def delete_board(self, board_id: str) -> None:
+        """
+        Delete a board from the database by its ID.
+        
+        Args:
+            board_id: Unique board identifier
+            
+        Raises:
+            OperationalError: If database operation fails
+        """
+        with self.get_session() as session:
+            board = session.query(Board).filter(Board.id == board_id).first()
+            if board:
+                session.delete(board)
     
     # Thread operations
     
