@@ -14,6 +14,24 @@ A modern, peer-to-peer bulletin board system with end-to-end encryption, built w
 - 🛡️ **Moderation**: Cryptographically signed moderation actions
 - ✅ **Verified Identity**: Ed25519 signatures on all posts
 
+## Screenshots
+
+### Discussion Boards
+![Discussion Boards](bbs.png)
+*Browse and create discussion boards with a modern, card-based interface*
+
+### Private Chats
+![Private Chats](chats.png)
+*Encrypted peer-to-peer messaging with conversation management*
+
+### Peer Monitor
+![Peer Monitor](peers.png)
+*Monitor connected peers, network status, and manage trust relationships*
+
+### Application Interface
+![Application Banner](banner.jpeg)
+*Clean, modern interface with consistent purple theme throughout*
+
 ## Architecture
 
 The application is built with a clean layered architecture:
@@ -50,7 +68,7 @@ The application is built with a clean layered architecture:
 
 Before installing on Windows, ensure you have:
 
-1. **Python 3.11 or higher**
+1. **Python 3.12
    - Download from [python.org](https://www.python.org/downloads/)
    - During installation, check "Add Python to PATH"
 
@@ -65,8 +83,8 @@ Before installing on Windows, ensure you have:
 
 ```powershell
 # Clone the repository (or download ZIP)
-git clone https://github.com/yourusername/bbs-p2p.git
-cd bbs-p2p
+git clone https://github.com/netcore3/GBB.git
+cd GBB
 
 # Create virtual environment
 python -m venv venv
